@@ -1,5 +1,85 @@
 const numericAscending = (a, b) => a - b;
 
+function orderPolygonPoints(pointsX, pointsY) {
+	const numPoints = pointsX.length;
+	let left = pointsX[0];
+	let right = left;
+	let leftIndex = 0;
+	let rightIndex = 0;
+	for (let i = 1; i < numPoints; i++) {
+		const x = pointsX[i];
+		if (x < left) {
+			left = x;
+			leftIndex = i;
+		} else if (x > right) {
+			right = x;
+			rightIndex = i;
+		}
+	}
+	const leftY = pointsY[leftIndex];
+	const rightY = pointsY[rightIndex];
+	const gradient = (rightY - leftY) / (right - left);
+	const intercept = leftY - gradient * left;
+
+	const indexesAbove = [];
+	const indexesBelow = [];
+	for (let i = 0; i < numPoints; i++) {
+		const x = pointsX[i];
+		const y = pointsY[i];
+		const lineY = gradient * x + intercept;
+		if (y > lineY) {
+			indexesAbove.push(i);
+		} else {
+			indexesBelow.push(i);
+		}
+	}
+
+	indexesAbove.sort( (i, j) => pointsX[i] - pointsX[j] );
+	indexesBelow.sort( (i, j) => pointsX[j] - pointsX[i] );
+	const numAbove = indexesAbove.length;
+	const numBelow = indexesBelow.length;
+	const newX = new Array(numPoints);
+	const newY = new Array(numPoints);
+
+	for (let i = 0; i < numAbove; i++) {
+		const sourceIndex = indexesAbove[i];
+		newX[i] = pointsX[sourceIndex];
+		newY[i] = pointsY[sourceIndex];
+	}
+	for (let i = 0; i < numBelow; i++) {
+		const sourceIndex = indexesBelow[i];
+		const destIndex = i + numAbove;
+		newX[destIndex] = pointsX[sourceIndex];
+		newY[destIndex] = pointsY[sourceIndex];
+	}
+	return [newX, newY];
+}
+
+function twiceTriangleArea(x1, y1, x2, y2, x3, y3) {
+	return (x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1);
+}
+
+function centroid(pointsX, pointsY) {
+	const numPoints = pointsX.length;
+	const x0 = pointsX[0];
+	const y0 = pointsY[0];
+	let doubleArea = 0, centreX = 0, centreY = 0;
+	for (let i = 1; i < numPoints; i++) {
+		const index2 = (i + 1) % numPoints;
+		const x1 = pointsX[i];
+		const y1 = pointsY[i];
+		const x2 = pointsX[index2];
+		const y2 = pointsY[index2];
+		const doubleTriArea = twiceTriangleArea(x0, y0, x1, y1, x2, y2);
+		centreX += doubleTriArea * (x0 + x1 + x2);
+		centreY += doubleTriArea * (y0 + y1 + y2);
+		doubleArea += doubleTriArea;
+	}
+	centreX /= 3 * doubleArea;
+	centreY /= 3 * doubleArea;
+	return [centreX, centreY];
+}
+
 class Shape {
 
 	/**Constructs a new shape from two arrays of x and y coordinates and performs the following
@@ -12,59 +92,33 @@ class Shape {
 	 */
 	constructor(pointsX, pointsY) {
 		const numPoints = pointsX.length;
-		let sumX = 0, sumY = 0;
-		for (let i = 0; i < numPoints; i++) {
-			sumX += pointsX[i];
-			sumY += pointsY[i];
-		}
-		const centreX = sumX / numPoints;
-		const centreY = sumY / numPoints;
+		[pointsX, pointsY] = orderPolygonPoints(pointsX, pointsY);
+		const [centreX, centreY] = centroid(pointsX, pointsY);
 
 		const deltaX = new Array(numPoints);
 		const deltaY = new Array(numPoints);
-		for (let i = 0; i < numPoints; i++) {
-			deltaX[i] = pointsX[i] - centreX;
-			deltaY[i] = pointsY[i] - centreY;
-		}
-
 		const angles = new Array(numPoints);
-		const indexes = new Array(numPoints);
-		for (let i = 0; i < numPoints; i++) {
-			angles[i] = Math.atan2(deltaY[i], deltaX[i]);
-			indexes[i] = i;
-		}
-
-		indexes.sort((i, j) => angles[i] - angles[j]);
-
-		const sortedX = new Array(numPoints);
-		const sortedY = new Array(numPoints);
-		const sortedDeltaX = new Array(numPoints);
-		const sortedDeltaY = new Array(numPoints);;
-		const sortedAngles = new Array(numPoints);
 		const radii = new Array(numPoints);
+
 		for (let i = 0; i < numPoints; i++) {
-			const index = indexes[i];
-			sortedX[i] = pointsX[index];
-			sortedY[i] = pointsY[index];
-			const dx = deltaX[index];
-			const dy = deltaY[index];
-			sortedDeltaX[i] = dx;
-			sortedDeltaY[i] = dy;
-			sortedAngles[i] = angles[index];
-			const radius = Math.hypot(dx, dy);
-			radii[i] = radius;
+			const dx = pointsX[i] - centreX;
+			const dy = pointsY[i] - centreY;
+			deltaX[i] = dx;
+			deltaY[i] = dy;
+			radii[i] = Math.hypot(dx, dy);
+			angles[i] = Math.atan2(deltaY[i], deltaX[i]);
 		}
 
 		let area = 0;
 		for (let i = 0; i < numPoints; i++) {
-			const angle1 = sortedAngles[i];
+			const angle1 = angles[i];
 			const radius1 = radii[i];
 			let angle2, radius2;
 			if (i === numPoints - 1) {
-				angle2 = sortedAngles[0] + 2 * Math.PI;
+				angle2 = angles[0] + 2 * Math.PI;
 				radius2 = radii[0];
 			} else {
-				angle2 = sortedAngles[i + 1];
+				angle2 = angles[i + 1];
 				radius2 = radii[i + 1];
 			}
 			// Area of a sector of an Archimedean spiral.
@@ -73,8 +127,8 @@ class Shape {
 			// r^2 = (a + bt) ^ 2 = a^2 + b^2 * t^2 + 2abt
 			// Integral r^2 dt = a^2 * t + 1/3 * b^2 * t^3 + abt^2
 			const angleDiff = angle2 - angle1;
-			const a = radius1;
-			const b = (radius2 - radius1) /  angleDiff;
+			const b = (radius2 - radius1) / angleDiff;
+			const a = radius1 - b * angle1;
 			const aSquare = a * a;
 			const bSquare = b * b;
 			const angle1Square = angle1 * angle1;
@@ -83,26 +137,26 @@ class Shape {
 			const angle1Cube = angle1Square * angle1;
 			const angle2Cube = angle2Square * angle2;
 			const angleCubeDiff = angle2Cube - angle1Cube;
-			area += 0.5 *
-				(aSquare * angleDiff + bSquare * angleCubeDiff / 3 + a * b * angleSquareDiff);
+			const sectorArea = aSquare * angleDiff + bSquare * angleCubeDiff / 3 + a * b * angleSquareDiff;
+			area += Math.abs(sectorArea);
 		}
-
+		area *= 0.5;
 
 		this.numPoints = numPoints;
-		this.pointsX = sortedX;
-		this.pointsY = sortedY;
+		this.pointsX = pointsX;
+		this.pointsY = pointsY;
 		this.centreX = centreX;
 		this.centreY = centreY;
-		this.deltaX = sortedDeltaX;
-		this.deltaY = sortedDeltaY;
-		this.angles = sortedAngles;
+		this.deltaX = deltaX;
+		this.deltaY = deltaY;
+		this.angles = angles;
 		this.radii = radii;
 		this.size = Math.sqrt(area / Math.PI);
 
-		this.resizedX = sortedDeltaX;
-		this.resizedY = sortedDeltaY;
-		this.rotatedX = sortedDeltaX;
-		this.rotatedY = sortedDeltaY;
+		this.resizedX = deltaX;
+		this.resizedY = deltaY;
+		this.rotatedX = deltaX;
+		this.rotatedY = deltaY;
 		this.rotation = 0;
 		// Align Vertex 0 of this shape with this numbered vertex in the target shape.
 		this.vertexRotations = 0;
@@ -151,6 +205,7 @@ class Shape {
 				// Set a maximum rotation threshold of 90 degrees.
 				continue;
 			}
+
 			const cos = Math.cos(rotation);
 			const sin = Math.sin(rotation);
 			const rotatedX = new Array(numPoints);
@@ -316,5 +371,6 @@ const polygon1 = randomPolygon(5);
 const polygon2 = randomPolygon(5);
 polygon2.resize(polygon1.size);
 polygon2.rotate(polygon1);
-interpolationStep = findInterpolationStep(polygon1, polygon2, 0.3);
+let speed = 0.4;
+interpolationStep = findInterpolationStep(polygon1, polygon2, speed);
 requestAnimationFrame(animate);
