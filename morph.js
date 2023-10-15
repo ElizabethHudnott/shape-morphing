@@ -1,5 +1,15 @@
+const numericAscending = (a, b) => a - b;
+
 class Shape {
 
+	/**Constructs a new shape from two arrays of x and y coordinates and performs the following
+	 * operations.
+	 * 1) Finds the shape's centre. (this.centreX and this.centreY)
+	 * 2) Finds the positions of the shape's vertices relative to its centre. (deltaX, deltaY)
+	 * 3) Finds the polar representations of those displacements. (angles, radii)
+	 * 4) Sorts the points by ascending order of their angle when expressed in polar form.
+	 * 5) Computes the average radius. (size)
+	 */
 	constructor(pointsX, pointsY) {
 		const numPoints = pointsX.length;
 		let sumX = 0, sumY = 0;
@@ -32,7 +42,6 @@ class Shape {
 		const sortedDeltaY = new Array(numPoints);;
 		const sortedAngles = new Array(numPoints);
 		const radii = new Array(numPoints);
-		let sumR = 0;
 		for (let i = 0; i < numPoints; i++) {
 			const index = indexes[i];
 			sortedX[i] = pointsX[index];
@@ -44,8 +53,40 @@ class Shape {
 			sortedAngles[i] = angles[index];
 			const radius = Math.hypot(dx, dy);
 			radii[i] = radius;
-			sumR += radius;
 		}
+
+		let area = 0;
+		for (let i = 0; i < numPoints; i++) {
+			const angle1 = sortedAngles[i];
+			const radius1 = radii[i];
+			let angle2, radius2;
+			if (i === numPoints - 1) {
+				angle2 = sortedAngles[0] + 2 * Math.PI;
+				radius2 = radii[0];
+			} else {
+				angle2 = sortedAngles[i + 1];
+				radius2 = radii[i + 1];
+			}
+			// Area of a sector of an Archimedean spiral.
+			// r = a + b * t
+			// area = 0.5 * Integral r^2 dt [angle1, angle2]
+			// r^2 = (a + bt) ^ 2 = a^2 + b^2 * t^2 + 2abt
+			// Integral r^2 dt = a^2 * t + 1/3 * b^2 * t^3 + abt^2
+			const angleDiff = angle2 - angle1;
+			const a = radius1;
+			const b = (radius2 - radius1) /  angleDiff;
+			const aSquare = a * a;
+			const bSquare = b * b;
+			const angle1Square = angle1 * angle1;
+			const angle2Square = angle2 * angle2;
+			const angleSquareDiff = angle2Square - angle1Square;
+			const angle1Cube = angle1Square * angle1;
+			const angle2Cube = angle2Square * angle2;
+			const angleCubeDiff = angle2Cube - angle1Cube;
+			area += 0.5 *
+				(aSquare * angleDiff + bSquare * angleCubeDiff / 3 + a * b * angleSquareDiff);
+		}
+
 
 		this.numPoints = numPoints;
 		this.pointsX = sortedX;
@@ -56,7 +97,7 @@ class Shape {
 		this.deltaY = sortedDeltaY;
 		this.angles = sortedAngles;
 		this.radii = radii;
-		this.size = sumR / numPoints;
+		this.size = Math.sqrt(area / Math.PI);
 
 		this.resizedX = sortedDeltaX;
 		this.resizedY = sortedDeltaY;
@@ -70,6 +111,10 @@ class Shape {
 		this.offsetsY = undefined;
 	}
 
+	/**Computes a new set of points by scaling the shape's original points to match a different
+	 * average radius and stores the rectangular coordinates of the new points in this.resizedX
+	 * and this.resizedY
+	 */
 	resize(size) {
 		const scale = size / this.size;
 		const numPoints = this.numPoints;
@@ -81,6 +126,11 @@ class Shape {
 		}
 	}
 
+	/**Computes a new set of points by rotating the scaled shape to align with the target shape
+	 * as best as possible and stores the rectangular coordinates of the new points in
+	 * this.rotatedX and this.rotatedY, along with the residual displacement vectors in
+	 * this.offsetsX and this.offsetsY.
+	 */
 	rotate(shape2) {
 		const numPoints = this.numPoints;
 		const numPoints2 = shape2.numPoints;
@@ -97,14 +147,16 @@ class Shape {
 				rotation -= 2 * Math.PI;
 			}
 			if (Math.abs(rotation) > 0.5 * Math.PI) {
+				// Rotations bigger than a certain amount are a bit dizzifying.
+				// Set a maximum rotation threshold of 90 degrees.
 				continue;
 			}
 			const cos = Math.cos(rotation);
 			const sin = Math.sin(rotation);
 			const rotatedX = new Array(numPoints);
 			const rotatedY = new Array(numPoints);
-			let distanceSquared = 0;
-			for (let j = 1; j < numPoints; j++) {
+			const distancesSquared = new Array(numPoints);
+			for (let j = 0; j < numPoints; j++) {
 				const x = this.resizedX[j];
 				const y = this.resizedY[j];
 				const transformedX = x * cos - y * sin;
@@ -114,12 +166,20 @@ class Shape {
 				const targetY = shape2.resizedY[vertexIndex2];
 				const distanceX = targetX - transformedX;
 				const distanceY = targetY - transformedY;
-				distanceSquared += distanceX * distanceX + distanceY * distanceY;
+				distancesSquared[j] = distanceX * distanceX + distanceY * distanceY;
 				rotatedX[j] = transformedX;
 				rotatedY[j] = transformedY;
 			}
-			if (distanceSquared < minError) {
-				minError = distanceSquared;
+			distancesSquared.sort(numericAscending);
+			const midIndex = numPoints >> 1;
+			let medianDistance;
+			if (numPoints & 1) {
+				medianDistance = distancesSquared[midIndex];
+			} else {
+				medianDistance = 0.5 * (distancesSquared[midIndex] + distancesSquared[midIndex - 1]);
+			}
+			if (medianDistance < minError) {
+				minError = medianDistance;
 				minErrorVertex = i;
 				const x0 = this.resizedX[0];
 				const y0 = this.resizedY[0];
@@ -256,5 +316,5 @@ const polygon1 = randomPolygon(5);
 const polygon2 = randomPolygon(5);
 polygon2.resize(polygon1.size);
 polygon2.rotate(polygon1);
-interpolationStep = findInterpolationStep(polygon1, polygon2, 0.25);
+interpolationStep = findInterpolationStep(polygon1, polygon2, 0.3);
 requestAnimationFrame(animate);
