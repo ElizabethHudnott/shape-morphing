@@ -320,13 +320,11 @@ function findInterpolationStep(polygon1, polygon2, speed = 1) {
 }
 
 function draw(interpolation) {
-	context.clearRect(0, 0, canvas.width, canvas.height);
-
-	context.globalAlpha = 0.4;
-	context.fillStyle = 'red';
-	drawPolygon(polygon1.pointsX, polygon1.pointsY);
-	context.fillStyle = 'blue';
-	drawPolygon(polygon2.pointsX, polygon2.pointsY);
+	context.globalAlpha = Math.max(Math.round(0.8 * 255 / ((60 / interpolationStep) / 1000)), 1) / 255;
+	let startComponent = interpolation < 0.5 ? Math.round((1 - 2 * interpolation) * 255) : 0;
+	let endComponent = interpolation > 0.5 ? Math.round(2 * (interpolation - 0.5) * 255) : 0;
+	let midComponent = Math.round(Math.min(interpolation, 1 - interpolation) * 255);
+	context.fillStyle = `rgb(${startComponent}, ${midComponent}, ${endComponent})`;
 
 	let translateX, translateY, scale, rotation;
 	translateX = polygon2.centreX * interpolation + polygon1.centreX * (1 - interpolation);
@@ -342,7 +340,6 @@ function draw(interpolation) {
 		pointsY[i] = polygon2.rotatedY[i] - (1 - interpolation) * polygon2.offsetsY[i];
 	}
 
-	context.fillStyle = 'lime';
 	context.save();
 	context.translate(translateX, translateY);
 	context.scale(scale, scale);
@@ -371,6 +368,6 @@ const polygon1 = randomPolygon(5);
 const polygon2 = randomPolygon(5);
 polygon2.resize(polygon1.size);
 polygon2.rotate(polygon1);
-let speed = 0.4;
+let speed = 6;
 interpolationStep = findInterpolationStep(polygon1, polygon2, speed);
 requestAnimationFrame(animate);
