@@ -464,9 +464,9 @@ if (polygon2.size > polygon1.size) {
 const morph = new Morph(polygon1, polygon2);
 
 // Draw with successive frames overlaid on top of each other.
-morph.setSpeed(50);
-morph.overlay(context, drawFaded);
+//morph.setSpeed(50);
+//morph.overlay(context, drawFaded);
 
 // Draw as an animation.
-//morph.setSpeed(6);
-//morph.animate(context, drawInterpolatedShape, drawSourceShapes);
+morph.setSpeed(6);
+morph.animate(context, drawInterpolatedShape, drawSourceShapes);
