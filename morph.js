@@ -152,7 +152,12 @@ class Shape {
 		this.angles = angles;
 		this.radii = radii;
 		this.size = Math.sqrt(area / Math.PI);
+		this.resetTransform();
+	}
 
+	resetTransform() {
+		const deltaX = this.deltaX;
+		const deltaY = this.deltaY;
 		this.resizedX = deltaX;
 		this.resizedY = deltaY;
 		this.rotatedX = deltaX;
@@ -272,12 +277,7 @@ function randomPolygon(numPoints) {
 	return new Shape(pointsX, pointsY);
 }
 
-const canvas = document.getElementById('canvas');
-const context = canvas.getContext('2d');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-
-function drawPolygon(pointsX, pointsY) {
+function polygonPath(context, pointsX, pointsY) {
 	const numPoints = pointsX.length;
 	context.beginPath();
 	context.moveTo(pointsX[0], pointsY[0]);
@@ -286,10 +286,9 @@ function drawPolygon(pointsX, pointsY) {
 		const y = pointsY[i];
 		context.lineTo(x, y);
 	}
-	context.fill();
 }
 
-function findInterpolationStep(polygon1, polygon2, speed = 1) {
+function moveLength(polygon1, polygon2) {
 	const numPoints = polygon2.numPoints;
 	const inverseScale = polygon1.size / polygon2.size;
 
@@ -316,58 +315,127 @@ function findInterpolationStep(polygon1, polygon2, speed = 1) {
 		const arcLength = (firstTerm + secondTerm) - (thirdTerm + fourthTerm);
 		maxArcLength = Math.max(maxArcLength, arcLength);
 	}
-	return speed / Math.max(maxTranslation, maxArcLength);
+	return Math.max(maxTranslation, maxArcLength);
 }
 
-function draw(interpolation) {
-	context.globalAlpha = Math.max(Math.round(0.8 * 255 / ((60 / interpolationStep) / 1000)), 1) / 255;
+class Morph {
+
+	constructor(polygon1, polygon2) {
+		polygon2.resize(polygon1.size);
+		polygon2.rotate(polygon1);
+
+		this.polygon1 = polygon1;
+		this.polygon2 = polygon2;
+		this.numFrames = 64;
+		this.interpolationStep = 2 ** -6;
+		this.translateX = 0;
+		this.translateY = 0;
+		this.scale = 1;
+		this.rotation = 0;
+		this.pointsX = undefined;
+		this.pointsY = undefined;
+	}
+
+	setSpeed(speed) {
+		// Technically the actual number of frames is one more than this.
+		const numFrames = Math.ceil(moveLength(this.polygon1, this.polygon2) / speed);
+		this.numFrames = numFrames;
+		this.interpolationStep = 1 / numFrames;
+	}
+
+	interpolate(interpolation) {
+		const polygon1 = this.polygon1;
+		const polygon2 = this.polygon2;
+		this.translateX = polygon2.centreX * interpolation + polygon1.centreX * (1 - interpolation);
+		this.translateY = polygon2.centreY * interpolation + polygon1.centreY * (1 - interpolation);
+		this.scale = polygon2.size / polygon1.size * interpolation + 1 - interpolation;
+		this.rotation = -polygon2.rotation * interpolation;
+
+		const numPoints = polygon2.numPoints;
+		const pointsX = new Array(numPoints);
+		const pointsY = new Array(numPoints);
+		for (let i = 0; i < numPoints; i++) {
+			pointsX[i] = polygon2.rotatedX[i] - (1 - interpolation) * polygon2.offsetsX[i];
+			pointsY[i] = polygon2.rotatedY[i] - (1 - interpolation) * polygon2.offsetsY[i];
+		}
+		this.pointsX = pointsX;
+		this.pointsY = pointsY;
+	}
+
+	transform(context) {
+		context.translate(this.translateX, this.translateY);
+		context.scale(this.scale, this.scale);
+		context.rotate(this.rotation);
+	}
+
+	animate(context, callback) {
+		const me = this;
+		let startTime;
+
+		function drawFrame(time) {
+			let interpolation;
+			if (startTime === undefined) {
+				startTime = time;
+				interpolation = 0;
+			} else {
+				// 60fps plus conversion from milliseconds.
+				const frameNumber = (time - startTime) * 0.06;
+				interpolation = Math.min(frameNumber * me.interpolationStep, 1);
+			}
+			me.interpolate(interpolation);
+
+			context.save();
+			me.transform(context);
+			callback(context, me, interpolation);
+			context.restore();
+
+			if (interpolation < 1) {
+				requestAnimationFrame(drawFrame);
+			}
+		}
+
+		requestAnimationFrame(drawFrame);
+	}
+
+	overlay(context, callback) {
+		for (let interpolation = 0; interpolation <= 1; interpolation += this.interpolationStep) {
+			this.interpolate(interpolation);
+			context.save();
+			this.transform(context);
+			callback(context, this, interpolation);
+			context.restore();
+		}
+	}
+
+}
+
+function drawFaded(context, morph, interpolation) {
+	context.globalAlpha = Math.max(
+		Math.round(0.9 * 255 / morph.numFrames),
+		1
+	) / 255;
 	let startComponent = interpolation < 0.5 ? Math.round((1 - 2 * interpolation) * 255) : 0;
 	let endComponent = interpolation > 0.5 ? Math.round(2 * (interpolation - 0.5) * 255) : 0;
 	let midComponent = Math.round(Math.min(interpolation, 1 - interpolation) * 255);
 	context.fillStyle = `rgb(${startComponent}, ${midComponent}, ${endComponent})`;
 
-	let translateX, translateY, scale, rotation;
-	translateX = polygon2.centreX * interpolation + polygon1.centreX * (1 - interpolation);
-	translateY = polygon2.centreY * interpolation + polygon1.centreY * (1 - interpolation);
-	scale = polygon2.size / polygon1.size * interpolation + 1 - interpolation;
-	rotation = -polygon2.rotation * interpolation;
-
-	const numPoints = polygon2.numPoints;
-	const pointsX = new Array(numPoints);
-	const pointsY = new Array(numPoints);
-	for (let i = 0; i < numPoints; i++) {
-		pointsX[i] = polygon2.rotatedX[i] - (1 - interpolation) * polygon2.offsetsX[i];
-		pointsY[i] = polygon2.rotatedY[i] - (1 - interpolation) * polygon2.offsetsY[i];
-	}
-
-	context.save();
-	context.translate(translateX, translateY);
-	context.scale(scale, scale);
-	context.rotate(rotation);
-	drawPolygon(pointsX, pointsY);
-	context.restore();
+	polygonPath(context, morph.pointsX, morph.pointsY);
+	context.fill();
 }
 
-let interpolationStep, animationStart;
 
-function animate(time) {
-	let interpolation;
-	if (animationStart === undefined) {
-		animationStart = time;
-		interpolation = 0;
-	} else {
-		interpolation = Math.min((time - animationStart) * interpolationStep, 1);
-	}
-	draw(interpolation);
-	if (interpolation < 1) {
-		requestAnimationFrame(animate);
-	}
+const canvas = document.getElementById('canvas');
+const context = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let polygon1 = randomPolygon(5);
+let polygon2 = randomPolygon(5);
+if (polygon2.size > polygon1.size) {
+	const temp = polygon1;
+	polygon1 = polygon2;
+	polygon2 = temp;
 }
-
-const polygon1 = randomPolygon(5);
-const polygon2 = randomPolygon(5);
-polygon2.resize(polygon1.size);
-polygon2.rotate(polygon1);
-let speed = 6;
-interpolationStep = findInterpolationStep(polygon1, polygon2, speed);
-requestAnimationFrame(animate);
+const morph = new Morph(polygon1, polygon2);
+//morph.setSpeed(50);
+//morph.overlay(context, drawFaded);
