@@ -368,7 +368,7 @@ class Morph {
 		context.rotate(this.rotation);
 	}
 
-	animate(context, callback) {
+	animate(context, mainCallback, beforeCallback = undefined) {
 		const me = this;
 		let startTime;
 
@@ -384,9 +384,14 @@ class Morph {
 			}
 			me.interpolate(interpolation);
 
+			const canvas = context.canvas;
+			context.clearRect(0, 0, canvas.width, canvas.height);
+			if (beforeCallback) {
+				beforeCallback(context, me, interpolation);
+			}
 			context.save();
 			me.transform(context);
-			callback(context, me, interpolation);
+			mainCallback(context, me, interpolation);
 			context.restore();
 
 			if (interpolation < 1) {
@@ -407,6 +412,26 @@ class Morph {
 		}
 	}
 
+}
+
+function drawSourceShapes(context, morph, interpolation) {
+	const polygon1 = morph.polygon1;
+	const polygon2 = morph.polygon2;
+	context.globalAlpha = 0.4;
+
+	polygonPath(context, polygon1.pointsX, polygon1.pointsY);
+	context.fillStyle = 'red';
+	context.fill();
+
+	polygonPath(context, polygon2.pointsX, polygon2.pointsY);
+	context.fillStyle = 'blue';
+	context.fill();
+}
+
+function drawInterpolatedShape(context, morph, interpolation) {
+	polygonPath(context, morph.pointsX, morph.pointsY);
+	context.fillStyle = 'lime';
+	context.fill();
 }
 
 function drawFaded(context, morph, interpolation) {
@@ -437,5 +462,11 @@ if (polygon2.size > polygon1.size) {
 	polygon2 = temp;
 }
 const morph = new Morph(polygon1, polygon2);
-//morph.setSpeed(50);
-//morph.overlay(context, drawFaded);
+
+// Draw with successive frames overlaid on top of each other.
+morph.setSpeed(50);
+morph.overlay(context, drawFaded);
+
+// Draw as an animation.
+//morph.setSpeed(6);
+//morph.animate(context, drawInterpolatedShape, drawSourceShapes);
