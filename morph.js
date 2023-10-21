@@ -1,7 +1,46 @@
+const DEFAULT_MAX_ROTATION = Math.PI / 3;
+
 const numericAscending = (a, b) => a - b;
+const numericDescending = (a, b) => b - a;
+
+function sortVertical(pointsX, pointsY, startIndex, endIndex) {
+	let i = startIndex;
+	let prevEndY;
+	while (i < endIndex) {
+		const startX = pointsX[i];
+		const startY = pointsY[i];
+		const subStartIndex = i;
+		let endY = startY;
+		let x;
+		i++;
+		do {
+			const x = pointsX[i];
+			const y = pointsY[i];
+			if (x !== startX) {
+				break;
+			}
+			if (y === endY) {
+				pointsX.splice(i, 1);
+				pointsY.splice(i, 1);
+				endIndex--;
+			} else {
+				endY = y;
+				i++;
+			}
+		} while (i <= endIndex);
+		const subPointsY = pointsY.slice(subStartIndex, i);
+		if (endY > prevEndY) {
+			subPointsY.sort(numericAscending);
+		} else {
+			subPointsY.sort(numericDescending);
+		}
+		pointsY.splice(subStartIndex, subPointsY.length, ...subPointsY);
+		prevEndY = endY;
+	}
+}
 
 function orderPolygonPoints(pointsX, pointsY) {
-	const numPoints = pointsX.length;
+	let numPoints = pointsX.length;
 	let left = pointsX[0];
 	let right = left;
 	let leftIndex = 0;
@@ -36,7 +75,7 @@ function orderPolygonPoints(pointsX, pointsY) {
 
 	indexesAbove.sort( (i, j) => pointsX[i] - pointsX[j] );
 	indexesBelow.sort( (i, j) => pointsX[j] - pointsX[i] );
-	const numAbove = indexesAbove.length;
+	let numAbove = indexesAbove.length;
 	const numBelow = indexesBelow.length;
 	const newX = new Array(numPoints);
 	const newY = new Array(numPoints);
@@ -46,12 +85,18 @@ function orderPolygonPoints(pointsX, pointsY) {
 		newX[i] = pointsX[sourceIndex];
 		newY[i] = pointsY[sourceIndex];
 	}
+	sortVertical(newX, newY, 0, numAbove - 1);
+	numPoints = newX.length;
+	numAbove = numPoints - numBelow;
+
 	for (let i = 0; i < numBelow; i++) {
 		const sourceIndex = indexesBelow[i];
 		const destIndex = i + numAbove;
 		newX[destIndex] = pointsX[sourceIndex];
 		newY[destIndex] = pointsY[sourceIndex];
 	}
+	sortVertical(newX, newY, numAbove, numPoints - 1);
+
 	return [newX, newY];
 }
 
@@ -190,7 +235,7 @@ class Shape {
 	 * this.rotatedX and this.rotatedY, along with the residual displacement vectors in
 	 * this.offsetsX and this.offsetsY.
 	 */
-	rotate(shape2) {
+	rotate(shape2, maxRotation) {
 		const numPoints = this.numPoints;
 		const numPoints2 = shape2.numPoints;
 		let minError = Infinity;
@@ -205,7 +250,7 @@ class Shape {
 			} else if (rotation > Math.PI) {
 				rotation -= 2 * Math.PI;
 			}
-			if (Math.abs(rotation) > 0.5 * Math.PI) {
+			if (Math.abs(rotation) > maxRotation) {
 				// Rotations bigger than a certain amount are a bit dizzifying.
 				// Set a maximum rotation threshold of 90 degrees.
 				continue;
@@ -271,8 +316,8 @@ function randomPolygon(numPoints) {
 	const pointsX = new Array(numPoints);
 	const pointsY = new Array(numPoints);
 	for (let i = 0; i < numPoints; i++) {
-		pointsX[i] = Math.random() * canvas.width;
-		pointsY[i] = Math.random() * canvas.height;
+		pointsX[i] = Math.trunc(Math.random() * canvas.width);
+		pointsY[i] = Math.trunc(Math.random() * canvas.height);
 	}
 	return new Shape(pointsX, pointsY);
 }
@@ -294,6 +339,7 @@ function moveLength(polygon1, polygon2) {
 
 	const translateX = polygon2.centreX - polygon1.centreX;
 	const translateY = polygon2.centreY - polygon1.centreY;
+	const absRotation = Math.abs(polygon2.rotation);
 	let maxTranslation = 0, maxArcLength = 0;
 	for (let i = 0; i < numPoints; i++) {
 		maxTranslation = Math.max(
@@ -302,27 +348,29 @@ function moveLength(polygon1, polygon2) {
 			Math.abs(translateY + polygon2.offsetsY[i])
 		);
 
-		const radius = polygon2.radii[i];
-		const scaledRadius = radius * inverseScale;
-		// Arc length of an Archimedean spiral.
-		const radialGrowth = (scaledRadius - radius) / Math.abs(polygon2.rotation);
-		let squareRoot = Math.sqrt(scaledRadius * scaledRadius + radialGrowth * radialGrowth);
-		const firstTerm =  0.5 * squareRoot * scaledRadius / radialGrowth;
-		const secondTerm = 0.5 * radialGrowth * Math.log(squareRoot + scaledRadius);
-		squareRoot = Math.sqrt(radius * radius + radialGrowth * radialGrowth);
-		const thirdTerm = 0.5 * squareRoot * radius / radialGrowth;
-		const fourthTerm = 0.5 * radialGrowth * Math.log(squareRoot + radius);
-		const arcLength = (firstTerm + secondTerm) - (thirdTerm + fourthTerm);
-		maxArcLength = Math.max(maxArcLength, arcLength);
+		if (absRotation > 0) {
+			const radius = polygon2.radii[i];
+			const scaledRadius = radius * inverseScale;
+			// Arc length of an Archimedean spiral.
+			const radialGrowth = (scaledRadius - radius) / absRotation;
+			let squareRoot = Math.sqrt(scaledRadius * scaledRadius + radialGrowth * radialGrowth);
+			const firstTerm =  0.5 * squareRoot * scaledRadius / radialGrowth;
+			const secondTerm = 0.5 * radialGrowth * Math.log(squareRoot + scaledRadius);
+			squareRoot = Math.sqrt(radius * radius + radialGrowth * radialGrowth);
+			const thirdTerm = 0.5 * squareRoot * radius / radialGrowth;
+			const fourthTerm = 0.5 * radialGrowth * Math.log(squareRoot + radius);
+			const arcLength = (firstTerm + secondTerm) - (thirdTerm + fourthTerm);
+			maxArcLength = Math.max(maxArcLength, arcLength);
+		}
 	}
 	return Math.max(maxTranslation, maxArcLength);
 }
 
 class Morph {
 
-	constructor(polygon1, polygon2) {
+	constructor(polygon1, polygon2, maxRotation = DEFAULT_MAX_ROTATION) {
 		polygon2.resize(polygon1.size);
-		polygon2.rotate(polygon1);
+		polygon2.rotate(polygon1, maxRotation);
 
 		this.polygon1 = polygon1;
 		this.polygon2 = polygon2;
