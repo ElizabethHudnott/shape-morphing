@@ -465,7 +465,7 @@ class Morph {
 function drawSourceShapes(context, morph, interpolation) {
 	const polygon1 = morph.polygon1;
 	const polygon2 = morph.polygon2;
-	context.globalAlpha = 0.4;
+	context.globalAlpha = 0.39;
 
 	polygonPath(context, polygon1.pointsX, polygon1.pointsY);
 	context.fillStyle = 'red';
@@ -502,19 +502,46 @@ const context = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-let polygon1 = randomPolygon(5);
-let polygon2 = randomPolygon(5);
-if (polygon2.size > polygon1.size) {
+const Mode = Object.freeze({
+	ANIMATE: 0,
+	OVERLAY: 1,
+});
+
+const parameters = new URLSearchParams(document.location.search);
+let mode;
+let speed = parseFloat(parameters.get('speed'));
+
+switch (parameters.get('render')) {
+case 'overlay':
+	mode = Mode.OVERLAY;
+	speed ||= 50;
+	break;
+default:
+	mode = Mode.ANIMATE;
+	speed ||= 6;
+}
+
+let numVertices = parseInt(parameters.get('vertices')) || 5;
+
+
+let polygon1 = randomPolygon(numVertices);
+let polygon2 = randomPolygon(numVertices);
+if (mode === Mode.OVERLAY && polygon2.size > polygon1.size) {
 	const temp = polygon1;
 	polygon1 = polygon2;
 	polygon2 = temp;
 }
+
 const morph = new Morph(polygon1, polygon2);
+morph.setSpeed(speed);
 
-// Draw with successive frames overlaid on top of each other.
-//morph.setSpeed(50);
-//morph.overlay(context, drawFaded);
+switch (mode) {
+case Mode.ANIMATE:
+	// Draw as an animation.
+	morph.animate(context, drawInterpolatedShape, drawSourceShapes);
+	break;
+case Mode.OVERLAY:
+	// Draw with successive frames overlaid on top of each other.
+	morph.overlay(context, drawFaded);
+}
 
-// Draw as an animation.
-morph.setSpeed(6);
-morph.animate(context, drawInterpolatedShape, drawSourceShapes);
