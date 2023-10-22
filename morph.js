@@ -66,7 +66,7 @@ function orderPolygonPoints(pointsX, pointsY) {
 		const x = pointsX[i];
 		const y = pointsY[i];
 		const lineY = gradient * x + intercept;
-		if (y > lineY) {
+		if (y >= lineY) {
 			indexesAbove.push(i);
 		} else {
 			indexesBelow.push(i);
@@ -251,8 +251,7 @@ class Shape {
 				rotation -= 2 * Math.PI;
 			}
 			if (Math.abs(rotation) > maxRotation) {
-				// Rotations bigger than a certain amount are a bit dizzifying.
-				// Set a maximum rotation threshold of 90 degrees.
+				// Rotations bigger than a certain amount can be a bit dizzifying.
 				continue;
 			}
 
@@ -508,8 +507,8 @@ const Mode = Object.freeze({
 });
 
 const parameters = new URLSearchParams(document.location.search);
-let mode;
 let speed = parseFloat(parameters.get('speed'));
+let mode;
 
 switch (parameters.get('render')) {
 case 'overlay':
@@ -532,7 +531,14 @@ if (mode === Mode.OVERLAY && polygon2.size > polygon1.size) {
 	polygon2 = temp;
 }
 
-const morph = new Morph(polygon1, polygon2);
+let maxRotation = parseInt(parameters.get('max_rotation'));
+if (maxRotation === null) {
+	maxRotation = DEFAULT_MAX_ROTATION;
+} else {
+	maxRotation *= 180 / Math.PI;
+}
+
+const morph = new Morph(polygon1, polygon2, maxRotation);
 morph.setSpeed(speed);
 
 switch (mode) {
