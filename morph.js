@@ -529,27 +529,72 @@ class Morph {
 
 }
 
+
 function linearInterpolation(startX, startY, endX, endY) {
 	const xDistance = endX - startX;
 	const yDistance = endY - startY;
 	function interpolate(t) {
-		const x = Math.round(startX + xDistance * t);
-		const y = Math.round(startY + yDistance * t);
+		const x = startX + xDistance * t;
+		const y = startY + yDistance * t;
 		return [x, y];
 	}
 	return interpolate;
 }
 
-class Path {
+class Path2D {
 
 	static generate(pathGenerator, startT = 0, endT = 1) {
-		const [startX, startY] = pathGenerator(startT);
-		const [endX, endY] = pathGenerator(endT);
-		const path = Path.#interpolateSegment(pathGenerator, startX, startY, startT, endX, endY, endT);
+		let [startX, startY] = pathGenerator(startT);
+		startX = Math.round(startX);
+		startY = Math.round(startY);
+
+		let [endX, endY] = pathGenerator(endT);
+		endX = Math.round(endX);
+		endY = Math.round(endY);
+		let path;
 		if (startX !== endX || startY !== endY) {
+			// open curve
+			path = Path2D.#interpolateSegment(
+				pathGenerator, startX, startY, startT, endX, endY, endT
+			);
 			path.prependPoint(startX, startY, startT);
+			path.appendPoint(endX, endY, endT);
+		} else {
+			// closed curve
+			let lowMidT = endT;
+			let highMidT = startT;
+			let lowMidX, lowMidY, highMidX, highMidY;
+			do {
+				lowMidT = 0.5 * (startT + lowMidT);
+				highMidT = 0.5 * (highMidT + endT);
+
+				[lowMidX, lowMidY] = pathGenerator(lowMidT);
+				lowMidX = Math.round(lowMidX);
+				lowMidY = Math.round(lowMidY);
+
+				[highMidX, highMidY] = pathGenerator(highMidT);
+				highMidX = Math.round(highMidX);
+				highMidY = Math.round(highMidY);
+			} while (lowMidX === startX && lowMidY === startY && highMidX === endX && highMidY === endY);
+			path = Path2D.#interpolateSegment(
+				pathGenerator, startX, startY, startT, lowMidX, lowMidY, lowMidT
+			);
+			path.prependPoint(startX, startY, startT);
+			path.appendPoint(lowMidX, lowMidY, lowMidT);
+			let path2;
+			if (lowMidT !== highMidT) {
+				path2 = Path2D.#interpolateSegment(
+					pathGenerator, lowMidX, lowMidY, lowMidT, highMidX, highMidY, highMidT
+				);
+				path.appendPath(path2);
+				path.appendPoint(highMidX, highMidY, highMidT);
+			}
+			path2 = Path2D.#interpolateSegment(
+				pathGenerator, highMidX, highMidY, highMidT, endX, endY, endT
+			);
+			path.appendPath(path2);
+			path.appendPoint(endX, endY, endT);
 		}
-		path.appendPoint(endX, endY, endT);
 		return path;
 	}
 
@@ -558,15 +603,23 @@ class Path {
 		const yDistance = Math.abs(endY - startY);
 
 		if (xDistance <= 1 && yDistance <= 1) {
-			// No intermediate points needed, the start and end points are sufficient.
-			return new Path([], [], []);
+			// No intermediate points needed. The start and end points of the current segment
+			// are enough.
+			return new Path2D([], [], []);
 		}
 
-		const midT = (startT + endT) / 2;
-		const [midX, midY] = pathGenerator(midT);
-		const path = Path.#interpolateSegment(pathGenerator, startX, startY, startT, midX, midY, midT);
+		const midT = 0.5 * (startT + endT);
+		let [midX, midY] = pathGenerator(midT);
+		midX = Math.round(midX);
+		midY = Math.round(midY);
+
+		const path = Path2D.#interpolateSegment(
+			pathGenerator, startX, startY, startT, midX, midY, midT
+		);
 		path.appendPoint(midX, midY, midT);
-		const path2 = Path.#interpolateSegment(pathGenerator, midX, midY, midT, endX, endY, endT);
+		const path2 = Path2D.#interpolateSegment(
+			pathGenerator, midX, midY, midT, endX, endY, endT
+		);
 		path.appendPath(path2);
 		return path;
 	}
@@ -579,6 +632,50 @@ class Path {
 
 	get length() {
 		return this.tValues.length;
+	}
+
+	getPoint(searchT) {
+		const tValues = this.tValues;
+		if (searchT === tValues[0]) {
+			return [ this.xValues[0], this.yValues[0] ];
+		}
+		let upperIndex = tValues.length - 1;
+		if (searchT === tValues[upperIndex]) {
+			return [ this.xValues[upperIndex], this.yValues[upperIndex] ];
+		}
+
+		let lowerIndex = 0;
+		let resultIndex;
+		while (true) {
+			const midIndex = (lowerIndex + upperIndex) >> 1;
+			const midValue = tValues[midIndex];
+			if (searchT === midValue) {
+				resultIndex = midIndex;
+				break;
+			} else if (searchT < midValue) {
+				if (lowerIndex = midIndex - 1) {
+					if (searchT - tValues[lowerIndex] <= midValue - searchT) {
+						resultIndex = lowerIndex;
+					} else {
+						resultIndex = midIndex;
+					}
+					break;
+				}
+				upperIndex = midIndex - 1;
+			} else {
+				// searchT > midValue
+				if (upperIndex = midIndex + 1) {
+					if (searchT - midValue <= tValues[upperIndex] - searchT) {
+						resultIndex = midIndex;
+					} else {
+						resultIndex = upperIndex;
+					}
+					break;
+				}
+				lowerIndex = midIndex + 1;
+			}
+		} // end loop
+		return [ this.xValues[resultIndex], this.yValues[resultIndex] ];
 	}
 
 	prependPoint(x, y, t) {
@@ -600,7 +697,46 @@ class Path {
 		this.tValues.splice(numPoints, 0, ...path.tValues);
 	}
 
+	/**Computes some statistic about the rate of change in the curve and returns that statistic.
+	 *
+	 * Examples:
+	 *
+	 * initialValue	func			Result
+	 * ---------------------------------
+	 * Infinity			Math.min		Value of delta t to use to animate the slowest part of the
+	 * 									curve at 1 pixel per frame.
+	 * 0					Math.max		Value of delta t to use to animate the fastest part of the
+	 * 									curve at 1 pixel per frame.
+	 */
+	deltaTCalculation(initialValue, func) {
+		const xValues = this.xValues;
+		const yValues = this.yValues;
+		const tValues = this.tValues;
+		const numPoints = tValues.length;
+		let prevX = xValues[0];
+		let prevY = yValues[0];
+		let prevT = tValues[0];
+		let deltaTStatistic = initialValue;
+		for (let i = 1; i < numPoints; i++) {
+			const x = xValues[i];
+			const y = yValues[i];
+			const t = tValues[i];
+			const xDistance = Math.abs(x - prevX);
+			const yDistance = Math.abs(y - prevY);
+			const deltaSpace = Math.max(xDistance, yDistance);
+			if (deltaSpace > 0) {
+				const deltaT = (t - prevT) / deltaSpace;
+				deltaTStatistic = func(deltaTStatistic, deltaT);
+				prevX = x;
+				prevY = y;
+				prevT = t;
+			}
+		}
+		return deltaTStatistic;
+	}
+
 }
+
 
 function drawSourceShapes(context, morph, interpolation) {
 	const polygon1 = morph.polygon1;
@@ -646,7 +782,7 @@ let mode, fillMorph;
 
 const fillStr = parameters.get('fill');
 if (fillStr) {
-	// Use %25 to write % inside a URL.
+	// Use %25 to write % inside a URL and %2B to write +.
 	fillMorph = new ColourMorph(fillStr);
 }
 
