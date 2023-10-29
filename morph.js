@@ -340,34 +340,81 @@ function moveLength(polygon1, polygon2) {
 	const translateY = polygon2.centreY - polygon1.centreY;
 	const absRotation = Math.abs(polygon2.rotation);
 	let maxTranslation = 0, maxArcLength = 0;
-	for (let i = 0; i < numPoints; i++) {
-		maxTranslation = Math.max(
-			maxTranslation,
-			Math.abs(translateX + polygon2.offsetsX[i]),
-			Math.abs(translateY + polygon2.offsetsY[i])
-		);
+	if (absRotation > 0) {
 
-		if (absRotation > 0) {
+		for (let i = 0; i < numPoints; i++) {
 			const radius = polygon2.radii[i];
 			const scaledRadius = radius * inverseScale;
+			const radialGrowth = scaledRadius - radius;
+
+			maxTranslation = Math.max(
+				maxTranslation,
+				Math.abs(translateX + polygon2.offsetsX[i]),
+				Math.abs(translateY + polygon2.offsetsY[i])
+			);
+
 			// Arc length of an Archimedean spiral.
-			const radialGrowth = (scaledRadius - radius) / absRotation;
-			let squareRoot = Math.sqrt(scaledRadius * scaledRadius + radialGrowth * radialGrowth);
-			const firstTerm =  0.5 * squareRoot * scaledRadius / radialGrowth;
-			const secondTerm = 0.5 * radialGrowth * Math.log(squareRoot + scaledRadius);
-			squareRoot = Math.sqrt(radius * radius + radialGrowth * radialGrowth);
-			const thirdTerm = 0.5 * squareRoot * radius / radialGrowth;
-			const fourthTerm = 0.5 * radialGrowth * Math.log(squareRoot + radius);
+			const radialGrowthPerRad = radialGrowth / absRotation;
+			let squareRoot = Math.sqrt(
+				scaledRadius * scaledRadius + radialGrowthPerRad * radialGrowthPerRad
+			);
+			const firstTerm =  0.5 * squareRoot * scaledRadius / radialGrowthPerRad;
+			const secondTerm = 0.5 * radialGrowthPerRad * Math.log(squareRoot + scaledRadius);
+			squareRoot = Math.sqrt(radius * radius + radialGrowthPerRad * radialGrowthPerRad);
+			const thirdTerm = 0.5 * squareRoot * radius / radialGrowthPerRad;
+			const fourthTerm = 0.5 * radialGrowthPerRad * Math.log(squareRoot + radius);
 			const arcLength = (firstTerm + secondTerm) - (thirdTerm + fourthTerm);
 			maxArcLength = Math.max(maxArcLength, arcLength);
 		}
+
+	} else {
+
+		for (let i = 0; i < numPoints; i++) {
+			const radius = polygon2.radii[i];
+			const scaledRadius = radius * inverseScale;
+			const radialGrowth = scaledRadius - radius;
+			const angle = polygon2.angles[i];
+			const growthX = radialGrowth * Math.cos(angle);
+			const growthY = radialGrowth * Math.sin(angle);
+
+			maxTranslation = Math.max(
+				maxTranslation,
+				Math.abs(translateX + growthX + polygon2.offsetsX[i]),
+				Math.abs(translateY + growthY + polygon2.offsetsY[i])
+			);
+		}
+
 	}
 	return Math.max(maxTranslation, maxArcLength);
 }
 
+class ConstantColour {
+	constructor(colour) {
+		this.colour = colour;
+	}
+
+	interpolate(interpolation, pointsX, pointsY) {
+		return this.colour;
+	}
+}
+
+class ColourMorph {
+
+	constructor(str) {
+		this.str = str.replace(/\s/g, '').replace(/[+\-]/g, ' $& ');
+	}
+
+	interpolate(interpolation, pointsX, pointsY) {
+		return this.str.replace(/\bt\b/g, interpolation);
+	}
+
+}
+
 class Morph {
 
-	constructor(polygon1, polygon2, maxRotation = DEFAULT_MAX_ROTATION) {
+	constructor(
+		polygon1, polygon2, fillMorph, blendMode = 'source-over', maxRotation = DEFAULT_MAX_ROTATION
+	) {
 		polygon2.resize(polygon1.size);
 		polygon2.rotate(polygon1, maxRotation);
 
@@ -381,6 +428,9 @@ class Morph {
 		this.rotation = 0;
 		this.pointsX = undefined;
 		this.pointsY = undefined;
+		this.fillMorph = fillMorph;
+		this.fillStyle = 'black';
+		this.blendMode = blendMode;
 	}
 
 	setSpeed(speed) {
@@ -407,12 +457,18 @@ class Morph {
 		}
 		this.pointsX = pointsX;
 		this.pointsY = pointsY;
+
+		if (this.fillMorph) {
+			this.fillStyle = this.fillMorph.interpolate(interpolation, pointsX, pointsY);
+		}
+
 	}
 
 	transform(context) {
 		context.translate(this.translateX, this.translateY);
 		context.scale(this.scale, this.scale);
 		context.rotate(this.rotation);
+		context.fillStyle = this.fillStyle;
 	}
 
 	animate(context, mainCallback, beforeCallback = undefined) {
@@ -438,6 +494,7 @@ class Morph {
 			}
 			context.save();
 			me.transform(context);
+			context.globalCompositeOperation = me.blendMode;
 			mainCallback(context, me, interpolation);
 			context.restore();
 
@@ -450,13 +507,97 @@ class Morph {
 	}
 
 	overlay(context, callback) {
-		for (let interpolation = 0; interpolation <= 1; interpolation += this.interpolationStep) {
+		this.interpolate(0);
+		context.save();
+		this.transform(context);
+		callback(context, this, 0);
+		context.restore();
+
+		for (
+			let interpolation = this.interpolationStep;
+			interpolation <= 1;
+			interpolation += this.interpolationStep
+		) {
 			this.interpolate(interpolation);
 			context.save();
 			this.transform(context);
+			context.globalCompositeOperation = this.blendMode;
 			callback(context, this, interpolation);
 			context.restore();
 		}
+	}
+
+}
+
+function linearInterpolation(startX, startY, endX, endY) {
+	const xDistance = endX - startX;
+	const yDistance = endY - startY;
+	function interpolate(t) {
+		const x = Math.round(startX + xDistance * t);
+		const y = Math.round(startY + yDistance * t);
+		return [x, y];
+	}
+	return interpolate;
+}
+
+class Path {
+
+	static generate(pathGenerator, startT = 0, endT = 1) {
+		const [startX, startY] = pathGenerator(startT);
+		const [endX, endY] = pathGenerator(endT);
+		const path = Path.#interpolateSegment(pathGenerator, startX, startY, startT, endX, endY, endT);
+		if (startX !== endX || startY !== endY) {
+			path.prependPoint(startX, startY, startT);
+		}
+		path.appendPoint(endX, endY, endT);
+		return path;
+	}
+
+	static #interpolateSegment(pathGenerator, startX, startY, startT, endX, endY, endT) {
+		const xDistance = Math.abs(endX - startX);
+		const yDistance = Math.abs(endY - startY);
+
+		if (xDistance <= 1 && yDistance <= 1) {
+			// No intermediate points needed, the start and end points are sufficient.
+			return new Path([], [], []);
+		}
+
+		const midT = (startT + endT) / 2;
+		const [midX, midY] = pathGenerator(midT);
+		const path = Path.#interpolateSegment(pathGenerator, startX, startY, startT, midX, midY, midT);
+		path.appendPoint(midX, midY, midT);
+		const path2 = Path.#interpolateSegment(pathGenerator, midX, midY, midT, endX, endY, endT);
+		path.appendPath(path2);
+		return path;
+	}
+
+	constructor(xValues, yValues, tValues) {
+		this.xValues = xValues;
+		this.yValues = yValues;
+		this.tValues = tValues;
+	}
+
+	get length() {
+		return this.tValues.length;
+	}
+
+	prependPoint(x, y, t) {
+		this.xValues.unshift(x);
+		this.yValues.unshift(y);
+		this.tValues.unshift(t);
+	}
+
+	appendPoint(x, y, t) {
+		this.xValues.push(x);
+		this.yValues.push(y);
+		this.tValues.push(t);
+	}
+
+	appendPath(path) {
+		const numPoints = this.tValues.length;
+		this.xValues.splice(numPoints, 0, ...path.xValues);
+		this.yValues.splice(numPoints, 0, ...path.yValues);
+		this.tValues.splice(numPoints, 0, ...path.tValues);
 	}
 
 }
@@ -477,19 +618,12 @@ function drawSourceShapes(context, morph, interpolation) {
 
 function drawInterpolatedShape(context, morph, interpolation) {
 	polygonPath(context, morph.pointsX, morph.pointsY);
-	context.fillStyle = 'lime';
 	context.fill();
 }
 
 function drawFaded(context, morph, interpolation) {
-	context.globalAlpha = Math.max(
-		Math.round(0.9 * 255 / morph.numFrames),
-		1
-	) / 255;
-	let startComponent = interpolation < 0.5 ? Math.round((1 - 2 * interpolation) * 255) : 0;
-	let endComponent = interpolation > 0.5 ? Math.round(2 * (interpolation - 0.5) * 255) : 0;
-	let midComponent = Math.round(Math.min(interpolation, 1 - interpolation) * 255);
-	context.fillStyle = `rgb(${startComponent}, ${midComponent}, ${endComponent})`;
+	const alpha = Math.max(Math.round(0.9 * 255 / morph.numFrames), 1) / 255;
+	context.globalAlpha = alpha;
 
 	polygonPath(context, morph.pointsX, morph.pointsY);
 	context.fill();
@@ -508,21 +642,33 @@ const Mode = Object.freeze({
 
 const parameters = new URLSearchParams(document.location.search);
 let speed = parseFloat(parameters.get('speed'));
-let mode;
+let mode, fillMorph;
+
+const fillStr = parameters.get('fill');
+if (fillStr) {
+	// Use %25 to write % inside a URL.
+	fillMorph = new ColourMorph(fillStr);
+}
 
 switch (parameters.get('render')) {
 case 'overlay':
 	mode = Mode.OVERLAY;
 	speed ||= 50;
+	if (!fillMorph) {
+		fillMorph = new ColourMorph('rgb(calc(255-510*t), min(255*t, 255-255*t), calc(510*t-255))');
+	}
 	break;
 default:
 	mode = Mode.ANIMATE;
 	speed ||= 6;
+	if (!fillMorph) {
+		fillMorph = new ConstantColour('lime');
+	}
 }
 
-let numVertices = parseInt(parameters.get('vertices')) || 5;
+const blendMode = parameters.get('blend') || 'source-over';
 
-
+const numVertices = parseInt(parameters.get('vertices')) || 5;
 let polygon1 = randomPolygon(numVertices);
 let polygon2 = randomPolygon(numVertices);
 if (mode === Mode.OVERLAY && polygon2.size > polygon1.size) {
@@ -532,13 +678,13 @@ if (mode === Mode.OVERLAY && polygon2.size > polygon1.size) {
 }
 
 let maxRotation = parseInt(parameters.get('max_rotation'));
-if (maxRotation === null) {
-	maxRotation = DEFAULT_MAX_ROTATION;
-} else {
+if (Number.isFinite(maxRotation)) {
 	maxRotation *= 180 / Math.PI;
+} else {
+	maxRotation = DEFAULT_MAX_ROTATION;
 }
 
-const morph = new Morph(polygon1, polygon2, maxRotation);
+const morph = new Morph(polygon1, polygon2, fillMorph, blendMode, maxRotation);
 morph.setSpeed(speed);
 
 switch (mode) {
