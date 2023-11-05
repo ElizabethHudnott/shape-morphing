@@ -505,7 +505,7 @@ class EdgeGradientMorph {
 
 		const colour1 = this.colourMorph1.interpolate(morph, interpolation);
 		const colour2 = this.colourMorph2.interpolate(morph, interpolation);
-		const gradient = context.createLinearGradient(x1, y2, x2, y2);
+		const gradient = context.createLinearGradient(x1, y1, x2, y2);
 		gradient.addColorStop(0, colour1);
 		gradient.addColorStop(1, colour2);
 		return gradient;
