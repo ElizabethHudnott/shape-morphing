@@ -393,7 +393,7 @@ class ConstantColour {
 		this.colour = colour;
 	}
 
-	interpolate(interpolation, pointsX, pointsY) {
+	interpolate(morph, interpolation) {
 		return this.colour;
 	}
 }
@@ -404,8 +404,160 @@ class ColourMorph {
 		this.str = str.replace(/\s/g, '').replace(/[+\-]/g, ' $& ');
 	}
 
-	interpolate(interpolation, pointsX, pointsY) {
+	interpolate(morph, interpolation) {
 		return this.str.replace(/\bt\b/g, interpolation);
+	}
+
+}
+
+class VertexGradientMorph {
+
+	constructor(colourMorph1, colourMorph2, vertexNum1, vertexNum2) {
+		this.colourMorph1 = colourMorph1;
+		this.colourMorph2 = colourMorph2;
+		this.vertexNum1 = vertexNum1;
+		this.vertexNum2 = vertexNum2;
+	}
+
+	interpolate(morph, interpolation, context) {
+		const x1 = morph.pointsX[this.vertexNum1];
+		const y1 = morph.pointsY[this.vertexNum1];
+		const x2 = morph.pointsX[this.vertexNum2];
+		const y2 = morph.pointsY[this.vertexNum2];
+		const colour1 = this.colourMorph1.interpolate(morph, interpolation);
+		const colour2 = this.colourMorph2.interpolate(morph, interpolation);
+		const gradient = context.createLinearGradient(x1, y2, x2, y2);
+		gradient.addColorStop(0, colour1);
+		gradient.addColorStop(1, colour2);
+		return gradient;
+	}
+
+}
+
+class EdgeGradientMorph {
+	constructor(colourMorph1, colourMorph2, vertexNum) {
+		this.colourMorph1 = colourMorph1;
+		this.colourMorph2 = colourMorph2;
+		this.vertexNum = vertexNum;
+	}
+
+	interpolate(morph, interpolation, context) {
+		const pointsX = morph.pointsX;
+		const pointsY = morph.pointsY;
+		const numPoints = pointsX.length;
+		const vertex1 =  this.vertexNum;
+		const vertex2 = (vertex1 + 1) % numPoints;
+		const edgeX1 = pointsX[vertex1];
+		const edgeY1 = pointsY[vertex1];
+		const edgeX2 = pointsX[vertex2];
+		const edgeY2 = pointsY[vertex2];
+		const edgeDeltaX = edgeX2 - edgeX1;
+		const edgeDeltaY = edgeY2 - edgeY1;
+		// Line 1: Our edge
+		// Line 2: Perpendicular to our edge running through another vertex
+		// a1 * x + b1 * y + c1 = 0
+		// a2 * x + b2 * y + c2 = 0
+		let a1, b1, c1, a2, b2;
+		if (edgeDeltaX === 0) {
+			// x = -c1
+			a1 = 1;
+			b1 = 0;
+			c1 = -edgeX1;
+			// y = -c2
+			a2 = 0;
+			b2 = 1;
+		} else if (edgeDeltaY === 0) {
+			// y = -c1
+			a1 = 0;
+			b1 = 1;
+			c1 = -edgeY1;
+			// x = -c2
+			a2 = 1;
+			b2 = 0;
+		} else {
+			a1 = -edgeDeltaY / edgeDeltaX;
+			b1 = 1;
+			c1 = -a1 * edgeX1 - edgeY1;
+			a2 = edgeDeltaX / edgeDeltaY;
+			b2 = 1;
+		}
+
+		let maxDistanceSq = 0;
+		let x1, y1, x2, y2;
+		for (let i = 0; i < numPoints; i++) {
+			const targetX = pointsX[i];
+			const targetY = pointsY[i];
+			const c2 = -a2 * targetX - b2 * targetY;
+			const denominator = a1 * b2 - a2 * b1;
+			const intersectX = (b1 * c2 - b2 * c1) / denominator;
+			const intersectY = (c1 * a2 - c2 * a1) / denominator;
+			const gradientDeltaX = targetX - intersectX;
+			const gradientDeltaY = targetY - intersectY;
+			const distanceSq = gradientDeltaX * gradientDeltaX + gradientDeltaY * gradientDeltaY;
+			if (distanceSq > maxDistanceSq) {
+				x1 = intersectX;
+				y1 = intersectY;
+				x2 = targetX;
+				y2 = targetY;
+				maxDistanceSq = distanceSq;
+			}
+		}
+
+		const colour1 = this.colourMorph1.interpolate(morph, interpolation);
+		const colour2 = this.colourMorph2.interpolate(morph, interpolation);
+		const gradient = context.createLinearGradient(x1, y2, x2, y2);
+		gradient.addColorStop(0, colour1);
+		gradient.addColorStop(1, colour2);
+		return gradient;
+	}
+
+}
+
+class StrokeStyle {
+	constructor() {
+		this.width = undefined;
+		this.dash = undefined;
+		this.dashOffset = undefined;
+		this.start = 0;
+		this.end = 1;
+	}
+}
+
+class StrokeMorph {
+
+	constructor() {
+		this.colourMorph = undefined;
+		this.startStyle = new StrokeStyle();
+		this.endStyle = new StrokeStyle();
+	}
+
+	setColour(colourMorph) {
+		this.colourMorph = colourMorph;
+	}
+
+	setWidth(start, end = start) {
+		this.startStyle.width = start;
+		this.endStyle.width = end;
+	}
+
+	setDash(start, end = start) {
+		this.startStyle.dash = start;
+		this.endStyle.dash = end;
+	}
+
+	setDashOffset(start, end = start) {
+		this.startStyle.dashOffset = start;
+		this.endStyle.dashOffset = end;
+	}
+
+	setStart(startFraction, endFraction = startFraction) {
+		this.startStyle.start = startFraction;
+		this.endStyle.start = endFraction;
+	}
+
+	setEnd(startFraction, endFraction = startFraction) {
+		this.startStyle.end = startFraction;
+		this.endStyle.end = endFraction;
 	}
 
 }
@@ -413,7 +565,7 @@ class ColourMorph {
 class Morph {
 
 	constructor(
-		polygon1, polygon2, fillMorph, blendMode = 'source-over', maxRotation = DEFAULT_MAX_ROTATION
+		polygon1, polygon2, fillMorph, strokeMorph, blendMode = 'source-over', maxRotation = DEFAULT_MAX_ROTATION
 	) {
 		polygon2.resize(polygon1.size);
 		polygon2.rotate(polygon1, maxRotation);
@@ -430,6 +582,8 @@ class Morph {
 		this.pointsY = undefined;
 		this.fillMorph = fillMorph;
 		this.fillStyle = 'black';
+		this.strokeMorph = strokeMorph;
+		this.stroke = undefined;
 		this.blendMode = blendMode;
 	}
 
@@ -440,7 +594,7 @@ class Morph {
 		this.interpolationStep = 1 / numFrames;
 	}
 
-	interpolate(interpolation) {
+	interpolate(interpolation, context) {
 		const polygon1 = this.polygon1;
 		const polygon2 = this.polygon2;
 		this.translateX = polygon2.centreX * interpolation + polygon1.centreX * (1 - interpolation);
@@ -459,7 +613,7 @@ class Morph {
 		this.pointsY = pointsY;
 
 		if (this.fillMorph) {
-			this.fillStyle = this.fillMorph.interpolate(interpolation, pointsX, pointsY);
+			this.fillStyle = this.fillMorph.interpolate(this, interpolation, context);
 		}
 
 	}
@@ -485,7 +639,7 @@ class Morph {
 				const frameNumber = (time - startTime) * 0.06;
 				interpolation = Math.min(frameNumber * me.interpolationStep, 1);
 			}
-			me.interpolate(interpolation);
+			me.interpolate(interpolation, context);
 
 			const canvas = context.canvas;
 			context.clearRect(0, 0, canvas.width, canvas.height);
@@ -507,7 +661,7 @@ class Morph {
 	}
 
 	overlay(context, callback) {
-		this.interpolate(0);
+		this.interpolate(0, context);
 		context.save();
 		this.transform(context);
 		callback(context, this, 0);
@@ -518,7 +672,7 @@ class Morph {
 			interpolation <= 1;
 			interpolation += this.interpolationStep
 		) {
-			this.interpolate(interpolation);
+			this.interpolate(interpolation, context);
 			context.save();
 			this.transform(context);
 			context.globalCompositeOperation = this.blendMode;
@@ -748,7 +902,7 @@ function drawSourceShapes(context, morph, interpolation) {
 	context.fill();
 
 	polygonPath(context, polygon2.pointsX, polygon2.pointsY);
-	context.fillStyle = 'blue';
+	context.fillStyle = '#ccc';
 	context.fill();
 }
 
@@ -813,6 +967,15 @@ if (mode === Mode.OVERLAY && polygon2.size > polygon1.size) {
 	polygon2 = temp;
 }
 
+const fillStr2 = parameters.get('fill2');
+if (fillStr2) {
+	const fromVertex = 0;
+	const toVertex = Math.trunc(numVertices / 2);
+	const toColour = new ColourMorph(fillStr2);
+	//fillMorph = new VertexGradientMorph(fillMorph, toColour, fromVertex, toVertex);
+	fillMorph = new EdgeGradientMorph(fillMorph, toColour, fromVertex, toVertex);
+}
+
 let maxRotation = parseInt(parameters.get('max_rotation'));
 if (Number.isFinite(maxRotation)) {
 	maxRotation *= 180 / Math.PI;
@@ -820,7 +983,7 @@ if (Number.isFinite(maxRotation)) {
 	maxRotation = DEFAULT_MAX_ROTATION;
 }
 
-const morph = new Morph(polygon1, polygon2, fillMorph, blendMode, maxRotation);
+const morph = new Morph(polygon1, polygon2, fillMorph, undefined, blendMode, maxRotation);
 morph.setSpeed(speed);
 
 switch (mode) {
