@@ -484,6 +484,8 @@ class EdgeGradientMorph {
 
 		let maxDistanceSq = 0;
 		let x1, y1, x2, y2;
+		const candidateX = [0, edgeX1, edgeX2];
+		const candidateY = [0, edgeY1, edgeY2];
 		for (let i = 0; i < numPoints; i++) {
 			const targetX = pointsX[i];
 			const targetY = pointsY[i];
@@ -491,8 +493,42 @@ class EdgeGradientMorph {
 			const denominator = a1 * b2 - a2 * b1;
 			const intersectX = (b1 * c2 - b2 * c1) / denominator;
 			const intersectY = (c1 * a2 - c2 * a1) / denominator;
-			const gradientDeltaX = targetX - intersectX;
-			const gradientDeltaY = targetY - intersectY;
+			candidateX[0] = intersectX;
+			candidateY[0] = intersectY;
+			let candidate = 0;
+
+			if (edgeX1 < edgeX2) {
+				if (intersectX > edgeX2) {
+					candidate = 2;
+				} else if (intersectX < edgeX1) {
+					candidate = 1;
+				}
+			} else if (edgeX2 < edgeX1) {
+				if (intersectX > edgeX1) {
+					candidate = 1;
+				} else if (intersectX < edgeX2) {
+					candidate = 2;
+				}
+			} else {
+				if (edgeY1 < edgeY2) {
+					if (intersectY > edgeY2) {
+						candidate = 2;
+					} else if (intersectY < edgeY1) {
+						candidate = 1;
+					}
+				} else if (edgeY2 < edgeY1) {
+					if (intersectY > edgeY1) {
+						candidate = 1;
+					} else if (intersectY < edgeY2) {
+						candidate = 2;
+					}
+				}
+			}
+
+			const measureX = candidateX[candidate];
+			const measureY = candidateY[candidate];
+			const gradientDeltaX = targetX - measureX;
+			const gradientDeltaY = targetY - measureY;
 			const distanceSq = gradientDeltaX * gradientDeltaX + gradientDeltaY * gradientDeltaY;
 			if (distanceSq > maxDistanceSq) {
 				x1 = intersectX;
