@@ -3,6 +3,23 @@ const DEFAULT_MAX_ROTATION = Math.PI / 3;
 const numericAscending = (a, b) => a - b;
 const numericDescending = (a, b) => b - a;
 
+function gcd(a, b) {
+	while (b !== 0) {
+		const temp = b;
+		b = a % b;
+		a = temp;
+	}
+	return a;
+}
+
+function lcm(a, b) {
+	if (a === b) {
+		return a;
+	} else {
+		return (a * b) / gcd(a, b);
+	}
+}
+
 function sortVertical(pointsX, pointsY, startIndex, endIndex) {
 	let i = startIndex;
 	let prevEndY;
@@ -565,6 +582,23 @@ class StrokeMorph {
 		this.colourMorph = undefined;
 		this.startStyle = new StrokeStyle();
 		this.endStyle = new StrokeStyle();
+
+		this.dash = undefined;
+	}
+
+	interpolate(interpolation) {
+		const startDash = this.startStyle.dash;
+		if (startDash === undefined) {
+			this.dash = undefined;
+		} else {
+			const numDashTerms = startDash.length;
+			const endDash = this.endStyle.dash;
+			const dash = new Array(numDashTerms);
+			for (let i = 0; i < numDashTerms; i++) {
+				dash[i] = (1 - interpolation) * startDash[i] + interpolation * endDash[i];
+			}
+			this.dash = dash;
+		}
 	}
 
 	setColour(colourMorph) {
@@ -577,6 +611,51 @@ class StrokeMorph {
 	}
 
 	setDash(start, end = start) {
+		if (start === undefined) {
+			this.startStyle.dash = undefined;
+			return;
+		}
+
+		let startLength = start.length;
+		let endLength = end.length;
+		let normalized = false;
+		if (startLength === endLength) {
+			normalized = true;
+		} else {
+			if (startLength & 1) {
+				start = start.concat(start);
+				startLength <<= 1;
+			}
+			if (endLength & 1) {
+				end = end.concat(end);
+				endLength <<= 1;
+			} else if (endLength === 0) {
+				end = new Array(startLength);
+				for (let i = 0; i < startLength; i += 2) {
+					end[i] = start[i] + start[i + 1];
+					end[i + 1] = 0;
+				}
+				normalized = true;
+			}
+			if (startLength === 0) {
+				start = new Array(endLength);
+				for (let i = 0; i < endLength; i += 2) {
+					start[i] = end[i] + end[i + 1];
+					start[i + 1] = 0;
+				}
+				normalized = true;
+			}
+		}
+
+		if (!normalized) {
+			const commonLength = lcm(startLength, endLength);
+			for (let i = startLength; i < commonLength; i++) {
+				start[i] = start[i % startLength];
+			}
+			for (let i = endLength; i < commonLength; i++) {
+				end[i] = end[i % endLength];
+			}
+		}
 		this.startStyle.dash = start;
 		this.endStyle.dash = end;
 	}
