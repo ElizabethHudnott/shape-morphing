@@ -456,11 +456,16 @@ class EdgeGradientMorph {
 		this.colourMorph1 = colourMorph1;
 		this.colourMorph2 = colourMorph2;
 		this.vertexNum = vertexNum;
+		this.targetVertex = undefined;
 	}
 
-	interpolate(morph, interpolation, context) {
-		const pointsX = morph.pointsX;
-		const pointsY = morph.pointsY;
+	beginPrecalculation(numPoints) {
+		const counts = new Array(numPoints);
+		counts.fill(0);
+		return counts;
+	}
+
+	precalculate(counts, pointsX, pointsY, interpolation) {
 		const numPoints = pointsX.length;
 		const vertex1 =  this.vertexNum;
 		const vertex2 = (vertex1 + 1) % numPoints;
@@ -500,7 +505,7 @@ class EdgeGradientMorph {
 		}
 
 		let maxDistanceSq = 0;
-		let x1, y1, x2, y2;
+		let targetVertex = 0;
 		const candidateX = [0, edgeX1, edgeX2];
 		const candidateY = [0, edgeY1, edgeY2];
 		for (let i = 0; i < numPoints; i++) {
@@ -548,13 +553,74 @@ class EdgeGradientMorph {
 			const gradientDeltaY = targetY - measureY;
 			const distanceSq = gradientDeltaX * gradientDeltaX + gradientDeltaY * gradientDeltaY;
 			if (distanceSq > maxDistanceSq) {
-				x1 = intersectX;
-				y1 = intersectY;
-				x2 = targetX;
-				y2 = targetY;
+				targetVertex = i;
 				maxDistanceSq = distanceSq;
 			}
 		}
+		counts[targetVertex]++;
+	}
+
+	endPrecalculation(counts) {
+		const numPoints = counts.length;
+		let targetVertex = 0;
+		let maxCount = 0;
+		for (let i = 0; i < numPoints; i++) {
+			const count = counts[i];
+			if (count > maxCount) {
+				targetVertex = i;
+				maxCount = count;
+			}
+		}
+		this.targetVertex = targetVertex;
+	}
+
+	interpolate(morph, interpolation, context) {
+		const pointsX = morph.pointsX;
+		const pointsY = morph.pointsY;
+		const numPoints = pointsX.length;
+		const vertex1 =  this.vertexNum;
+		const vertex2 = (vertex1 + 1) % numPoints;
+		const edgeX1 = pointsX[vertex1];
+		const edgeY1 = pointsY[vertex1];
+		const edgeX2 = pointsX[vertex2];
+		const edgeY2 = pointsY[vertex2];
+		const edgeDeltaX = edgeX2 - edgeX1;
+		const edgeDeltaY = edgeY2 - edgeY1;
+		// Line 1: Our edge
+		// Line 2: Perpendicular to our edge running through another vertex
+		// a1 * x + b1 * y + c1 = 0
+		// a2 * x + b2 * y + c2 = 0
+		let a1, b1, c1, a2, b2;
+		if (edgeDeltaX === 0) {
+			// x = -c1
+			a1 = 1;
+			b1 = 0;
+			c1 = -edgeX1;
+			// y = -c2
+			a2 = 0;
+			b2 = 1;
+		} else if (edgeDeltaY === 0) {
+			// y = -c1
+			a1 = 0;
+			b1 = 1;
+			c1 = -edgeY1;
+			// x = -c2
+			a2 = 1;
+			b2 = 0;
+		} else {
+			a1 = -edgeDeltaY / edgeDeltaX;
+			b1 = 1;
+			c1 = -a1 * edgeX1 - edgeY1;
+			a2 = edgeDeltaX / edgeDeltaY;
+			b2 = 1;
+		}
+
+		const x2 = pointsX[this.targetVertex];
+		const y2 = pointsY[this.targetVertex];
+		const c2 = -a2 * x2 - b2 * y2;
+		const denominator = a1 * b2 - a2 * b1;
+		const x1 = (b1 * c2 - b2 * c1) / denominator;
+		const y1 = (c1 * a2 - c2 * a1) / denominator;
 
 		const colour1 = this.colourMorph1.interpolate(morph, interpolation);
 		const colour2 = this.colourMorph2.interpolate(morph, interpolation);
@@ -707,6 +773,22 @@ class Morph {
 		const numFrames = Math.ceil(moveLength(this.polygon1, this.polygon2) / speed);
 		this.numFrames = numFrames;
 		this.interpolationStep = 1 / numFrames;
+
+		if (this.fillMorph?.precalculate) {
+			const numPoints = polygon2.numPoints;
+			const pointsX = new Array(numPoints);
+			const pointsY = new Array(numPoints);
+			const state = this.fillMorph.beginPrecalculation(numPoints);
+			for (let i = 0; i <= numFrames; i++) {
+				const interpolation = i / numFrames;
+				for (let j = 0; j < numPoints; j++) {
+					pointsX[j] = polygon2.rotatedX[j] - (1 - interpolation) * polygon2.offsetsX[j];
+					pointsY[j] = polygon2.rotatedY[j] - (1 - interpolation) * polygon2.offsetsY[j];
+				}
+				this.fillMorph.precalculate(state, pointsX, pointsY, interpolation);
+			}
+			this.fillMorph.endPrecalculation(state);
+		}
 	}
 
 	interpolate(interpolation, context) {
@@ -1013,7 +1095,7 @@ function drawSourceShapes(context, morph, interpolation) {
 	context.globalAlpha = 0.39;
 
 	polygonPath(context, polygon1.pointsX, polygon1.pointsY);
-	context.fillStyle = 'red';
+	context.fillStyle = '#dfd';
 	context.fill();
 
 	polygonPath(context, polygon2.pointsX, polygon2.pointsY);
@@ -1027,7 +1109,7 @@ function drawInterpolatedShape(context, morph, interpolation) {
 }
 
 function drawFaded(context, morph, interpolation) {
-	const alpha = Math.max(Math.round(0.9 * 255 / morph.numFrames), 1) / 255;
+	const alpha = Math.max(Math.round(1 * 255 / morph.numFrames), 1) / 255;
 	context.globalAlpha = alpha;
 
 	polygonPath(context, morph.pointsX, morph.pointsY);
@@ -1065,7 +1147,7 @@ case 'overlay':
 	break;
 default:
 	mode = Mode.ANIMATE;
-	speed ||= 6;
+	speed ||= 5;
 	if (!fillMorph) {
 		fillMorph = new ConstantColour('lime');
 	}
@@ -1088,7 +1170,7 @@ if (fillStr2) {
 	const toVertex = Math.trunc(numVertices / 2);
 	const toColour = new ColourMorph(fillStr2);
 	//fillMorph = new VertexGradientMorph(fillMorph, toColour, fromVertex, toVertex);
-	fillMorph = new EdgeGradientMorph(fillMorph, toColour, fromVertex, toVertex);
+	fillMorph = new EdgeGradientMorph(fillMorph, toColour, fromVertex);
 }
 
 let maxRotation = parseInt(parameters.get('max_rotation'));
