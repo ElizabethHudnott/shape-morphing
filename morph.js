@@ -20,6 +20,27 @@ function lcm(a, b) {
 	}
 }
 
+function choices(n, m) {
+	if (m === 0) {
+		return [[]];
+	} else if (m > n) {
+		return [];
+	} else if (m === n) {
+		const choice = new Array(n);
+		for (let i = 0; i < n; i++) {
+			choice[i] = i;
+		}
+		return [choice];
+	}
+	const choicesIn = choices(n - 1, m - 1);
+	const allChoices = choices(n - 1, m);
+	for (let choice of choicesIn) {
+		choice.push(n - 1);
+		allChoices.push(choice);
+	}
+	return allChoices;
+}
+
 function sortVertical(pointsX, pointsY, startIndex, endIndex) {
 	let i = startIndex;
 	let prevEndY;
@@ -225,8 +246,6 @@ class Shape {
 		this.rotatedX = deltaX;
 		this.rotatedY = deltaY;
 		this.rotation = 0;
-		// Align Vertex 0 of this shape with this numbered vertex in the target shape.
-		this.vertexRotations = 0;
 		// The offsets that remain after translation, resizing and rotating.
 		this.offsetsX = undefined;
 		this.offsetsY = undefined;
@@ -255,72 +274,99 @@ class Shape {
 	rotate(shape2, maxRotation) {
 		const numPoints = this.numPoints;
 		const numPoints2 = shape2.numPoints;
+		let minNumPoints, maxNumPoints;
+		if (numPoints >= numPoints2) {
+			maxNumPoints = numPoints;
+			minNumPoints = numPoints2;
+		} else {
+			maxNumPoints = numPoints2;
+			minNumPoints = numPoints;
+		}
 		let minError = Infinity;
-		let minErrorVertex = 0;
+		let minErrorChoice = new Array(minNumPoints);
+		let minErrorChoice2 = new Array(minNumPoints);
+		let minErrorAlignmentIndex = 0;
+		for (let i = 0; i < minNumPoints; i++) {
+			minErrorChoice[i] = Math.trunc(i * maxNumPoints / numPoints);
+		}
+		for (let i = 0; i < minNumPoints; i++) {
+			minErrorChoice2[i] = Math.trunc(i * maxNumPoints / numPoints2);
+		}
+
 		let selectedRotatedX = this.resizedX;
 		let selectedRotatedY = this.resizedY;
 		let selectedRotation = 0;
 		for (let i = 0; i < numPoints2; i++) {
-			let rotation = shape2.angles[i] - this.angles[0];
-			if (rotation < -Math.PI) {
-				rotation += 2 * Math.PI;
-			} else if (rotation > Math.PI) {
-				rotation -= 2 * Math.PI;
-			}
-			if (Math.abs(rotation) > maxRotation) {
-				// Rotations bigger than a certain amount can be a bit dizzifying.
-				continue;
-			}
+			for (let choice of choices(numPoints, minNumPoints)) {
+				let rotation = shape2.angles[i] - this.angles[choice[0]];
+				if (rotation < -Math.PI) {
+					rotation += 2 * Math.PI;
+				} else if (rotation > Math.PI) {
+					rotation -= 2 * Math.PI;
+				}
+				if (Math.abs(rotation) > maxRotation) {
+					// Rotations bigger than a certain amount can be a bit dizzifying.
+					continue;
+				}
+				const cos = Math.cos(rotation);
+				const sin = Math.sin(rotation);
 
-			const cos = Math.cos(rotation);
-			const sin = Math.sin(rotation);
-			const rotatedX = new Array(numPoints);
-			const rotatedY = new Array(numPoints);
-			const distancesSquared = new Array(numPoints);
-			for (let j = 0; j < numPoints; j++) {
-				const x = this.resizedX[j];
-				const y = this.resizedY[j];
-				const transformedX = x * cos - y * sin;
-				const transformedY = x * sin + y * cos;
-				const vertexIndex2 = (i + j) % numPoints2;
-				const targetX = shape2.resizedX[vertexIndex2];
-				const targetY = shape2.resizedY[vertexIndex2];
-				const distanceX = targetX - transformedX;
-				const distanceY = targetY - transformedY;
-				distancesSquared[j] = distanceX * distanceX + distanceY * distanceY;
-				rotatedX[j] = transformedX;
-				rotatedY[j] = transformedY;
-			}
-			distancesSquared.sort(numericAscending);
-			const midIndex = numPoints >> 1;
-			let medianDistance;
-			if (numPoints & 1) {
-				medianDistance = distancesSquared[midIndex];
-			} else {
-				medianDistance = 0.5 * (distancesSquared[midIndex] + distancesSquared[midIndex - 1]);
-			}
-			if (medianDistance < minError) {
-				minError = medianDistance;
-				minErrorVertex = i;
-				const x0 = this.resizedX[0];
-				const y0 = this.resizedY[0];
-				selectedRotatedX = rotatedX;
-				selectedRotatedY = rotatedY;
-				selectedRotatedX[0] = x0 * cos - y0 * sin;
-				selectedRotatedY[0] = x0 * sin + y0 * cos;
-				selectedRotation = rotation;
-			}
-		}
+				for (let choice2 of choices(numPoints2, minNumPoints)) {
+					const alignmentIndex = choice2.indexOf(i);
+					if (alignmentIndex === -1) {
+						continue;
+					}
+					const rotatedX = new Array(numPoints);
+					const rotatedY = new Array(numPoints);
+					const distancesSquared = new Array(numPoints);
+					for (let j = 0; j < minNumPoints; j++) {
+						const sourceIndex = choice[j];
+						const x = this.resizedX[sourceIndex];
+						const y = this.resizedY[sourceIndex];
+						const transformedX = x * cos - y * sin;
+						const transformedY = x * sin + y * cos;
+						const targetIndex = choice2[(alignmentIndex + j) % minNumPoints];
+						const targetX = shape2.resizedX[targetIndex];
+						const targetY = shape2.resizedY[targetIndex];
+						const distanceX = targetX - transformedX;
+						const distanceY = targetY - transformedY;
+						distancesSquared[j] = distanceX * distanceX + distanceY * distanceY;
+						rotatedX[j] = transformedX;
+						rotatedY[j] = transformedY;
+					}
+					distancesSquared.sort(numericAscending);
+					const midIndex = numPoints >> 1;
+					let medianDistance;
+					if (numPoints & 1) {
+						medianDistance = distancesSquared[midIndex];
+					} else {
+						medianDistance = 0.5 * (distancesSquared[midIndex] + distancesSquared[midIndex - 1]);
+					}
+					if (medianDistance < minError) {
+						minError = medianDistance;
+						minErrorChoice = choice;
+						minErrorChoice2 = choice2;
+						minErrorAlignmentIndex = alignmentIndex;
+						selectedRotatedX = rotatedX;
+						selectedRotatedY = rotatedY;
+						selectedRotation = rotation;
+					}
+				}	// end for each choice of vertices in Shape 2
+			}		// end for each choice of vertices in Shape 1
+		}			// end for each vertex of Shape 2 to align to
 		this.rotatedX = selectedRotatedX;
 		this.rotatedY = selectedRotatedY;
 		this.rotation = selectedRotation;
-		this.vertexRotations = minErrorVertex;
 		const offsetsX = new Array(numPoints);
 		const offsetsY = new Array(numPoints);
-		for (let i = 0; i < numPoints; i++) {
-			const vertexIndex2 = (i + minErrorVertex) % numPoints2;
-			offsetsX[i] = selectedRotatedX[i] - shape2.resizedX[vertexIndex2];
-			offsetsY[i] = selectedRotatedY[i] - shape2.resizedY[vertexIndex2];
+		for (let i = 0; i < minNumPoints; i++) {
+			const sourceIndex = minErrorChoice[i];
+			const targetIndex = minErrorChoice2[(minErrorAlignmentIndex + i) % minNumPoints];
+			offsetsX[sourceIndex] = selectedRotatedX[sourceIndex] - shape2.resizedX[targetIndex];
+			offsetsY[sourceIndex] = selectedRotatedY[sourceIndex] - shape2.resizedY[targetIndex];
+		}
+		if (numPoints > numPoints2) {
+
 		}
 		this.offsetsX = offsetsX;
 		this.offsetsY = offsetsY;
@@ -336,6 +382,110 @@ function randomPolygon(numPoints) {
 		pointsY[i] = Math.trunc(Math.random() * canvas.height);
 	}
 	return new Shape(pointsX, pointsY);
+}
+
+function randomFraction(minFraction, maxValue) {
+	const r = Math.random() * 2 * (maxValue - 1);
+	if (r >= maxValue - 1) {
+		return r - (maxValue - 1) + 1;
+	}
+	return r / (maxValue - 1) * (1 - minFraction) + minFraction;
+}
+
+/**Creates a random cyclic polygon centred on (0,0) with radius 1 and order 2 reflective
+ * symmetry.
+ */
+function cyclicPolygonPoints(
+	numPoints, radiusX, radiusY = radiusX, offsetX = 0, offsetY = 0, minAngleProportion = 0.5,
+	maxAngleProportion = 1.5, minRotation = 0, maxRotation = 2 * Math.PI
+) {
+	const angles = new Array(numPoints);
+	angles[0] = 0;
+	const regularAngle = 2 * Math.PI / numPoints;
+	const numFreeAngles = Math.ceil(0.5 * numPoints) - 1;
+	if ((numPoints & 1) === 0) {
+		angles[0.5 * numPoints] = Math.PI;
+		let amountLeft = Math.PI;
+		for (let i = 1; i <= numFreeAngles; i++) {
+			const equalAmount = amountLeft / (numFreeAngles - i + 2);
+			const minAmount = Math.max(amountLeft -
+				(numFreeAngles - i + 1) * maxAngleProportion, minAngleProportion) * regularAngle;
+			const maxAmount = Math.min(amountLeft -
+				(numFreeAngles - i + 1) * minAngleProportion, maxAngleProportion) * regularAngle;
+			const amount = Math.min(Math.max(
+				randomFraction(minAngleProportion, maxAngleProportion) * equalAmount,
+				minAmount), maxAmount);
+			amountLeft -= amount;
+			angles[i] = Math.PI - amountLeft;
+		}
+	} else {
+		let amountLeft = Math.PI;
+		for (let i = 1; i <= numFreeAngles; i++) {
+			const equalAmount = amountLeft / (numFreeAngles - i + 1.5);
+			const minAmount = Math.max(amountLeft -
+				(numFreeAngles - i + 0.5) * maxAngleProportion, minAngleProportion) * regularAngle;
+			const maxAmount = Math.min(amountLeft -
+				(numFreeAngles - i + 0.5) * minAngleProportion, maxAngleProportion) * regularAngle;
+			const amount = Math.min(Math.max(
+				randomFraction(minAngleProportion, maxAngleProportion) * equalAmount,
+				minAmount), maxAmount);
+			amountLeft -= amount;
+			angles[i] = Math.PI - amountLeft;
+		}
+	}
+	for (let i = 0; i < numFreeAngles; i++) {
+		angles[numPoints - 1 - i] = 2 * Math.PI - angles[i + 1];
+	}
+	const rotation = Math.random() * (maxRotation - minRotation) + minRotation;
+	const pointsX = new Array(numPoints);
+	const pointsY = new Array(numPoints);
+	for (let i = 0; i < numPoints; i++) {
+		const angle = angles[i] + rotation;
+		pointsX[i] = Math.round(radiusX * Math.cos(angle) + offsetX);
+		pointsY[i] = Math.round(radiusY * Math.sin(angle) + offsetY);
+	}
+	return [pointsX, pointsY]
+}
+
+function alignLeftOrTop(values) {
+	const numValues = values.length;
+	let min = Infinity;
+	for (let i = 0; i < numValues; i++) {
+		min = Math.min(min, values[i]);
+	}
+	for (let i = 0; i < numValues; i++) {
+		values[i] -= min;
+	}
+}
+
+function alignRightOrBottom(values, alignmentValue) {
+	const numValues = values.length;
+	let max = -Infinity;
+	for (let i = 0; i < numValues; i++) {
+		max = Math.max(max, values[i]);
+	}
+	const offset = alignmentValue - max;
+	for (let i = 0; i < numValues; i++) {
+		values[i] += offset;
+	}
+}
+
+function layoutPolygons(pointsGenerator, numPoints) {
+	let width1, height1, offsetX1, offsetY1;
+	let width2, height2, offsetX2, offsetY2;
+	const width = canvas.width;
+	const height = canvas.height;
+	width1 = (0.5 * (3 + Math.random()) / 3) * width;
+	height1 = Math.min(width1 / (Math.random() + 1), 2/3 * height);
+	width2 = (0.5 * (3 + Math.random()) / 3) * width;
+	height2 = Math.min(width2 / (Math.random() + 1), 2/3 * height);
+	const [pointsX1, pointsY1] = pointsGenerator(numPoints, 0.5 * width1, 0.5 * height1);
+	const [pointsX2, pointsY2] = pointsGenerator(numPoints, 0.5 * width2, 0.5 * height2);
+	alignLeftOrTop(pointsX1);
+	alignLeftOrTop(pointsY1);
+	alignRightOrBottom(pointsX2, width);
+	alignRightOrBottom(pointsY2, height);
+	return [new Shape(pointsX1, pointsY1), new Shape(pointsX2, pointsY2)];
 }
 
 function polygonPath(context, pointsX, pointsY) {
@@ -1218,13 +1368,14 @@ class Path2D {
 function drawSourceShapes(context, morph, interpolation) {
 	const polygon1 = morph.polygon1;
 	const polygon2 = morph.polygon2;
-	context.globalAlpha = 0.39;
 
 	polygonPath(context, polygon1.pointsX, polygon1.pointsY);
-	context.fillStyle = '#dfd';
+	context.globalAlpha = 0.7;
+	context.fillStyle = '#ffc';
 	context.fill();
 
 	polygonPath(context, polygon2.pointsX, polygon2.pointsY);
+	context.globalAlpha = 0.39;
 	context.fillStyle = '#ccc';
 	context.fill();
 }
@@ -1292,8 +1443,9 @@ default:
 const blendMode = parameters.get('blend') || 'source-over';
 
 const numVertices = parseInt(parameters.get('vertices')) || 5;
-let polygon1 = randomPolygon(numVertices);
-let polygon2 = randomPolygon(numVertices);
+//let polygon1 = randomPolygon(numVertices);
+//let polygon2 = randomPolygon(numVertices);
+let [polygon1, polygon2] = layoutPolygons(cyclicPolygonPoints, numVertices);
 if (mode === Mode.OVERLAY && polygon2.size > polygon1.size) {
 	const temp = polygon1;
 	polygon1 = polygon2;
@@ -1348,7 +1500,6 @@ let endEndStroke = parseFloat(parameters.get('end2'))
 if (!Number.isFinite(endEndStroke)) {
 	endEndStroke = startEndStroke === 0 ? 1 : startEndStroke;
 }
-console.log(`${startStartStroke} ${startEndStroke} ${endStartStroke} ${endEndStroke}`);
 
 let strokeColourMorph;
 let strokeMorph;
