@@ -403,15 +403,19 @@ function cyclicPolygonPoints(
 	angles[0] = 0;
 	const regularAngle = 2 * Math.PI / numPoints;
 	const numFreeAngles = Math.ceil(0.5 * numPoints) - 1;
+	let amountLeft = Math.PI;
 	if ((numPoints & 1) === 0) {
 		angles[0.5 * numPoints] = Math.PI;
-		let amountLeft = Math.PI;
 		for (let i = 1; i <= numFreeAngles; i++) {
 			const equalAmount = amountLeft / (numFreeAngles - i + 2);
-			const minAmount = Math.max(amountLeft -
-				(numFreeAngles - i + 1) * maxAngleProportion, minAngleProportion) * regularAngle;
-			const maxAmount = Math.min(amountLeft -
-				(numFreeAngles - i + 1) * minAngleProportion, maxAngleProportion) * regularAngle;
+			const minAmount = Math.max(
+				amountLeft - (numFreeAngles - i + 1) * maxAngleProportion * regularAngle,
+				minAngleProportion * regularAngle
+			);
+			const maxAmount = Math.min(
+				amountLeft - (numFreeAngles - i + 1) * minAngleProportion * regularAngle,
+				maxAngleProportion * regularAngle
+			);
 			const amount = Math.min(Math.max(
 				randomFraction(minAngleProportion, maxAngleProportion) * equalAmount,
 				minAmount), maxAmount);
@@ -419,13 +423,16 @@ function cyclicPolygonPoints(
 			angles[i] = Math.PI - amountLeft;
 		}
 	} else {
-		let amountLeft = Math.PI;
 		for (let i = 1; i <= numFreeAngles; i++) {
 			const equalAmount = amountLeft / (numFreeAngles - i + 1.5);
-			const minAmount = Math.max(amountLeft -
-				(numFreeAngles - i + 0.5) * maxAngleProportion, minAngleProportion) * regularAngle;
-			const maxAmount = Math.min(amountLeft -
-				(numFreeAngles - i + 0.5) * minAngleProportion, maxAngleProportion) * regularAngle;
+			const minAmount = Math.max(
+				amountLeft - (numFreeAngles - i + 0.5) * maxAngleProportion * regularAngle,
+				minAngleProportion * regularAngle
+			);
+			const maxAmount = Math.min(
+				amountLeft - (numFreeAngles - i + 0.5) * minAngleProportion * regularAngle,
+				maxAngleProportion * regularAngle
+			);
 			const amount = Math.min(Math.max(
 				randomFraction(minAngleProportion, maxAngleProportion) * equalAmount,
 				minAmount), maxAmount);
