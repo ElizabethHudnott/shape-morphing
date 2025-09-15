@@ -477,22 +477,71 @@ function alignRightOrBottom(values, alignmentValue) {
 	}
 }
 
+function centreValues(values, centre) {
+	const numValues = values.length;
+	let min = Infinity, max = -Infinity;
+	for (let i = 0; i < numValues; i++) {
+		const value = values[i];
+		if (value < min) {
+			min = value;
+		}
+		if (value > max) {
+			max = value;
+		}
+	}
+	const offset = centre - min - 0.5 * (max - min);
+
+	for (let i = 0; i < numValues; i++) {
+		values[i] += offset;
+	}
+}
+
 function layoutPolygons(pointsGenerator, numPoints) {
-	let width1, height1, offsetX1, offsetY1;
-	let width2, height2, offsetX2, offsetY2;
+	let width1, height1, width2, height2;
+	let pointsX1, pointsY1, pointsX2, pointsY2;
 	const width = canvas.width;
 	const height = canvas.height;
-	width1 = (0.5 * (3 + Math.random()) / 3) * width;
-	height1 = Math.min(width1 / (Math.random() + 1), 2/3 * height);
-	width2 = (0.5 * (3 + Math.random()) / 3) * width;
-	height2 = Math.min(width2 / (Math.random() + 1), 2/3 * height);
-	const [pointsX1, pointsY1] = pointsGenerator(numPoints, 0.5 * width1, 0.5 * height1);
-	const [pointsX2, pointsY2] = pointsGenerator(numPoints, 0.5 * width2, 0.5 * height2);
-	alignLeftOrTop(pointsX1);
-	alignLeftOrTop(pointsY1);
-	alignRightOrBottom(pointsX2, width);
-	alignRightOrBottom(pointsY2, height);
-	return [new Shape(pointsX1, pointsY1), new Shape(pointsX2, pointsY2)];
+	const r = Math.random();
+	if (r < 0.5) {
+		// Case 1: Top left and bottom right
+		// Case 2: Bottom left and top right
+		width1 = (0.5 * (3 + Math.random()) / 3) * width;
+		height1 = Math.min(width1 / (Math.random() + 1), 2/3 * height);
+		width2 = (0.5 * (3 + Math.random()) / 3) * width;
+		height2 = Math.min(width2 / (Math.random() + 1), 2/3 * height);
+		[pointsX1, pointsY1] = pointsGenerator(numPoints, 0.5 * width1, 0.5 * height1);
+		[pointsX2, pointsY2] = pointsGenerator(numPoints, 0.5 * width2, 0.5 * height2);
+		alignLeftOrTop(pointsX1);
+		alignRightOrBottom(pointsX2, width);
+		if (r < 0.25) {
+			alignLeftOrTop(pointsY1);
+			alignRightOrBottom(pointsY2, height);
+		} else {
+			alignLeftOrTop(pointsY2);
+			alignRightOrBottom(pointsY1, height);
+		}
+	} else {
+		// Case 3: Entire left and middle right
+		// Case 4: Middle left and entire right
+		height1 = height;
+		width1 = Math.min(height1 / (Math.random() + 1), 0.5 * width);
+		width2 = (0.5 * (3 + Math.random()) / 3) * width;
+		height2 = Math.min(width2 / (Math.random() + 1), 0.5 * height);
+		[pointsX1, pointsY1] = pointsGenerator(numPoints, 0.5 * width1, 0.5 * height1);
+		[pointsX2, pointsY2] = pointsGenerator(numPoints, 0.5 * width2, 0.5 * height2);
+		centreValues(pointsY1, 0.5 * height);
+		centreValues(pointsY2, 0.5 * height);
+		if (r < 0.75) {
+			alignLeftOrTop(pointsX1);
+			alignRightOrBottom(pointsX2, width);
+		} else {
+			alignRightOrBottom(pointsX1, width);
+			alignLeftOrTop(pointsX2);
+		}
+	}
+	const shape1 = new Shape(pointsX1, pointsY1);
+	const shape2 = new Shape(pointsX2, pointsY2);
+	return Math.random() < 0.5 ? [shape1, shape2] : [shape2, shape1];
 }
 
 function polygonPath(context, pointsX, pointsY) {
