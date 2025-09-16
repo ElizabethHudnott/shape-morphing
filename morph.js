@@ -1,4 +1,4 @@
-const DEFAULT_MAX_ROTATION = Math.PI / 3;
+const DEFAULT_MAX_ROTATION = Math.PI / 2;
 
 const numericAscending = (a, b) => a - b;
 const numericDescending = (a, b) => b - a;
@@ -690,6 +690,11 @@ function moveLength(polygon1, polygon2) {
 	return Math.max(maxTranslation, maxArcLength);
 }
 
+const Ease = {
+	LINEAR: t => t,
+	SINE_IN: t => 1 - Math.cos(0.5 * Math.PI * t),
+};
+
 class ConstantColour {
 	constructor(colour) {
 		this.colour = colour;
@@ -1075,10 +1080,18 @@ class Morph {
 		this.polygon2 = polygon2;
 		this.numFrames = 64;
 		this.interpolationStep = 2 ** -6;
+
 		this.translateX = 0;
 		this.translateY = 0;
-		this.scale = 1;
 		this.rotation = 0;
+		this.scale = 1;
+		this.translateXEase = Ease.LINEAR;
+		this.translateYEase = Ease.LINEAR;
+		this.rotationEase = Ease.LINEAR;
+		this.scaleXEase = Ease.LINEAR;
+		this.scaleYEase = Ease.LINEAR;
+		this.offsetEase = Ease.SINE_IN;
+
 		this.pointsX = undefined;
 		this.pointsY = undefined;
 		this.fillMorph = fillMorph;
@@ -1114,17 +1127,25 @@ class Morph {
 	interpolate(interpolation, context) {
 		const polygon1 = this.polygon1;
 		const polygon2 = this.polygon2;
-		this.translateX = polygon2.centreX * interpolation + polygon1.centreX * (1 - interpolation);
-		this.translateY = polygon2.centreY * interpolation + polygon1.centreY * (1 - interpolation);
-		this.scale = polygon2.size / polygon1.size * interpolation + 1 - interpolation;
-		this.rotation = -polygon2.rotation * interpolation;
+		let t;
+		t = this.translateXEase(interpolation);
+		this.translateX = polygon2.centreX * t + polygon1.centreX * (1 - t);
+		t = this.translateYEase(interpolation);
+		this.translateY = polygon2.centreY * t + polygon1.centreY * (1 - t);
+		t = this.rotationEase(interpolation);
+		this.rotation = -polygon2.rotation * t;
+		t = this.scaleXEase(interpolation);
+		this.scaleX = polygon2.size / polygon1.size * t + 1 - t;
+		t = this.scaleYEase(interpolation);
+		this.scaleY = polygon2.size / polygon1.size * t + 1 - t;
 
 		const numPoints = polygon2.numPoints;
 		const pointsX = new Array(numPoints);
 		const pointsY = new Array(numPoints);
+		t = this.offsetEase(interpolation);
 		for (let i = 0; i < numPoints; i++) {
-			pointsX[i] = polygon2.rotatedX[i] - (1 - interpolation) * polygon2.offsetsX[i];
-			pointsY[i] = polygon2.rotatedY[i] - (1 - interpolation) * polygon2.offsetsY[i];
+			pointsX[i] = polygon2.rotatedX[i] - (1 - t) * polygon2.offsetsX[i];
+			pointsY[i] = polygon2.rotatedY[i] - (1 - t) * polygon2.offsetsY[i];
 		}
 		this.pointsX = pointsX;
 		this.pointsY = pointsY;
@@ -1149,8 +1170,8 @@ class Morph {
 
 	transform(context) {
 		context.translate(this.translateX, this.translateY);
-		context.scale(this.scale, this.scale);
 		context.rotate(this.rotation);
+		context.scale(this.scaleX, this.scaleY);
 		context.fillStyle = this.fillStyle;
 	}
 
@@ -1210,18 +1231,6 @@ class Morph {
 		}
 	}
 
-}
-
-
-function linearInterpolation(startX, startY, endX, endY) {
-	const xDistance = endX - startX;
-	const yDistance = endY - startY;
-	function interpolate(t) {
-		const x = startX + xDistance * t;
-		const y = startY + yDistance * t;
-		return [x, y];
-	}
-	return interpolate;
 }
 
 class Path2D {
