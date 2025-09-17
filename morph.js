@@ -693,6 +693,7 @@ function moveLength(polygon1, polygon2) {
 const Ease = {
 	LINEAR: t => t,
 	SINE_IN: t => 1 - Math.cos(0.5 * Math.PI * t),
+	STEPS_JUMP_END: n => t => Math.trunc(t * n) / n,
 };
 
 class ConstantColour {
@@ -946,9 +947,14 @@ class StrokeMorph {
 		this.dashOffset = 0;
 		this.start = 0;
 		this.end = 1;
+
+		this.widthEase = Ease.LINEAR;
+		this.startEase = Ease.LINEAR;
+		this.endEase = Ease.LINEAR;
 	}
 
 	interpolate(morph, interpolation) {
+		let t;
 		if (this.colourMorph) {
 			this.colour = this.colourMorph.interpolate(this, interpolation);
 		} else {
@@ -963,9 +969,10 @@ class StrokeMorph {
 			if (endWidth === undefined) {
 				this.width = startWidth;
 			} else {
+				t = this.widthEase(interpolation);
 				this.width =
-					(startWidth * (1 - interpolation) + this.endStyle.width * interpolation) /
-					morph.scale;
+					(startWidth * (1 - t) + this.endStyle.width * t) /
+					(0.5 * (morph.scaleX + morph.scaleY));
 			}
 		}
 
@@ -987,11 +994,13 @@ class StrokeMorph {
 
 		const startStart = this.startStyle.start;
 		const endStart = this.endStyle.start;
-		this.start =  startStart * (1 - interpolation) + endStart * interpolation;
+		t = this.startEase(interpolation);
+		this.start =  startStart * (1 - t) + endStart * t;
 
 		const startEnd = this.startStyle.end;
 		const endEnd = this.endStyle.end;
-		this.end =  startEnd * (1 - interpolation) + endEnd * interpolation;
+		t = this.endEase(interpolation);
+		this.end =  startEnd * (1 - t) + endEnd * t;
 	}
 
 	setColour(colourMorph) {
@@ -1029,7 +1038,6 @@ class StrokeMorph {
 					end[i] = start[i] + start[i + 1];
 					end[i + 1] = 0;
 				}
-				normalized = true;
 			}
 			if (startLength === 0) {
 				start = new Array(endLength);
@@ -1084,7 +1092,8 @@ class Morph {
 		this.translateX = 0;
 		this.translateY = 0;
 		this.rotation = 0;
-		this.scale = 1;
+		this.scaleX = 1;
+		this.scaleY = 1;
 		this.translateXEase = Ease.LINEAR;
 		this.translateYEase = Ease.LINEAR;
 		this.rotationEase = Ease.LINEAR;
