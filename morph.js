@@ -692,7 +692,10 @@ function moveLength(polygon1, polygon2) {
 
 const Ease = {
 	LINEAR: t => t,
+	QUAD_IN: t => t * t,
+	QUAD_OUT: t => 1 - t * t,
 	SINE_IN: t => 1 - Math.cos(0.5 * Math.PI * t),
+	SINE_OUT: t => Math.sin(0.5 * Math.PI * t),
 	STEPS_JUMP_END: n => t => Math.trunc(t * n) / n,
 };
 
@@ -943,12 +946,15 @@ class StrokeMorph {
 
 		this.colour = undefined;
 		this.width = undefined;
+		// TODO scale the dash and dash offset as the perimeter length changes.
+		// TODO scale the dash offset by the number of frames?
 		this.dash = undefined;
-		this.dashOffset = 0;
+		this.dashOffset = undefined;
 		this.start = 0;
 		this.end = 1;
 
 		this.widthEase = Ease.LINEAR;
+		this.dashOffsetEase = Ease.LINEAR;
 		this.startEase = Ease.LINEAR;
 		this.endEase = Ease.LINEAR;
 	}
@@ -989,7 +995,8 @@ class StrokeMorph {
 			this.dash = dash;
 			const startOffset = this.startStyle.dashOffset;
 			const endOffset = this.endStyle.dashOffset;
-			this.dashOffset = startOffset * (1 - interpolation) + endOffset * interpolation;
+			t = this.dashOffsetEase(interpolation);
+			this.dashOffset = startOffset * (1 - t) + endOffset * t;
 		}
 
 		const startStart = this.startStyle.start;
@@ -1173,6 +1180,7 @@ class Morph {
 			}
 			if (strokeMorph.dash !== undefined) {
 				context.setLineDash(strokeMorph.dash);
+				context.lineDashOffset = strokeMorph.dashOffset;
 			}
 		}
 	}
@@ -1548,10 +1556,16 @@ if (!hasEndLineWidth) {
 	endLineWidth = undefined;
 }
 let startDashPattern = [], endDashPattern = [];
+let startDashOffset = 0, endDashOffset = 0;
 if (parameters.has('dash')) {
 	startDashPattern = parameters.get('dash').split(',').map(x => parseFloat(x));
+	startDashOffset = parameters.get('dash_offset') || 0;
 	if (!parameters.has('dash2')) {
 		endDashPattern = startDashPattern;
+		endDashOffset = parameters.get('dash_offset2');
+		if (endDashOffset == null) {
+			endDashOffset = startDashOffset;
+		}
 	}
 }
 if (parameters.has('dash2')) {
@@ -1598,6 +1612,7 @@ if (startLineWidth > 0 || endLineWidth > 0) {
 	strokeMorph = new StrokeMorph(true, strokeColourMorph);
 	strokeMorph.setWidth(startLineWidth, endLineWidth);
 	strokeMorph.setDash(startDashPattern, endDashPattern);
+	strokeMorph.setDashOffset(startDashOffset, endDashOffset);
 	strokeMorph.setStart(startStartStroke, endStartStroke);
 	strokeMorph.setEnd(startEndStroke, endEndStroke);
 }
