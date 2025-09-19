@@ -729,11 +729,11 @@ class ColourMorph {
 
 class VertexGradientMorph {
 
-	constructor(colourMorph1, colourMorph2, vertexNum1, vertexNum2) {
-		this.colourMorph1 = colourMorph1;
-		this.colourMorph2 = colourMorph2;
+	constructor(vertexNum1, vertexNum2, colourMorphs, offsets = [0, 1]) {
 		this.vertexNum1 = vertexNum1;
 		this.vertexNum2 = vertexNum2;
+		this.colourMorphs = colourMorphs;
+		this.offsets = offsets;
 	}
 
 	interpolate(morph, interpolation, context) {
@@ -741,22 +741,23 @@ class VertexGradientMorph {
 		const y1 = morph.pointsY[this.vertexNum1];
 		const x2 = morph.pointsX[this.vertexNum2];
 		const y2 = morph.pointsY[this.vertexNum2];
-		const colour1 = this.colourMorph1.interpolate(morph, interpolation);
-		const colour2 = this.colourMorph2.interpolate(morph, interpolation);
 		const gradient = context.createLinearGradient(x1, y2, x2, y2);
-		gradient.addColorStop(0, colour1);
-		gradient.addColorStop(1, colour2);
+		for (let i = 0; i < this.offsets.length; i++) {
+			const colour = this.colourMorphs[i].interpolate(morph, interpolation);
+			gradient.addColorStop(this.offsets[i], colour);
+		}
 		return gradient;
 	}
 
 }
 
 class EdgeGradientMorph {
-	constructor(colourMorph1, colourMorph2, vertexNum) {
-		this.colourMorph1 = colourMorph1;
-		this.colourMorph2 = colourMorph2;
+
+	constructor(vertexNum, colourMorphs, offsets = [0, 1]) {
 		this.vertexNum = vertexNum;
 		this.targetVertex = undefined;
+		this.colourMorphs = colourMorphs;
+		this.offsets = offsets;
 	}
 
 	beginPrecalculation(numPoints) {
@@ -922,11 +923,11 @@ class EdgeGradientMorph {
 		const x1 = (b1 * c2 - b2 * c1) / denominator;
 		const y1 = (c1 * a2 - c2 * a1) / denominator;
 
-		const colour1 = this.colourMorph1.interpolate(morph, interpolation);
-		const colour2 = this.colourMorph2.interpolate(morph, interpolation);
 		const gradient = context.createLinearGradient(x1, y1, x2, y2);
-		gradient.addColorStop(0, colour1);
-		gradient.addColorStop(1, colour2);
+		for (let i = 0; i < this.offsets.length; i++) {
+			const colour = this.colourMorphs[i].interpolate(morph, interpolation);
+			gradient.addColorStop(this.offsets[i], colour);
+		}
 		return gradient;
 	}
 
@@ -1545,8 +1546,8 @@ if (fillStr2) {
 	const fromVertex = 0;
 	const toVertex = Math.trunc(numVertices / 2);
 	const toColour = new ColourMorph(fillStr2);
-	//fillMorph = new VertexGradientMorph(fillMorph, toColour, fromVertex, toVertex);
-	fillMorph = new EdgeGradientMorph(fillMorph, toColour, fromVertex);
+	//fillMorph = new VertexGradientMorph(fromVertex, toVertex, [fillMorph, toColour]);
+	fillMorph = new EdgeGradientMorph(fromVertex, [fillMorph, toColour]);
 }
 
 const DEFAULT_LINE_WIDTH = 2;
