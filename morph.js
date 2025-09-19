@@ -711,12 +711,18 @@ class ConstantColour {
 
 class ColourMorph {
 
-	constructor(str) {
+	constructor(str, easings = (new Array(4)).fill(Ease.LINEAR)) {
 		this.str = str.replace(/\s/g, '').replace(/[+\-]/g, ' $& ');
+		this.easings = easings;
 	}
 
 	interpolate(morph, interpolation) {
-		return this.str.replace(/\bt\b/g, interpolation);
+		const values = this.easings.map(f => f(interpolation));
+		let str = this.str.replace(/\bw\b/g, values[0]);
+		str = str.replace(/\bx\b/g, values[1]);
+		str = str.replace(/\by\b/g, values[2]);
+		str = str.replace(/\bz\b/g, values[3]);
+		return str;
 	}
 
 }
