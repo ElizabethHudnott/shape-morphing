@@ -1093,7 +1093,8 @@ class StrokeMorph {
 class Morph {
 
 	constructor(
-		polygon1, polygon2, fillMorph, strokeMorph, blendMode = 'source-over', maxRotation = DEFAULT_MAX_ROTATION
+		polygon1, polygon2, fillMorph, strokeMorph, blendMode = 'source-over', startBlur = 0,
+		endBlur = startBlur, maxRotation = DEFAULT_MAX_ROTATION
 	) {
 		polygon2.resize(polygon1.size);
 		polygon2.rotate(polygon1, maxRotation);
@@ -1122,6 +1123,11 @@ class Morph {
 		this.strokeMorph = strokeMorph;
 		this.stroke = undefined;
 		this.blendMode = blendMode;
+
+		this.startBlur = startBlur;
+		this.endBlur = endBlur;
+		this.blurEase = Ease.LINEAR;
+		this.blur = startBlur;
 	}
 
 	setSpeed(speed) {
@@ -1190,6 +1196,11 @@ class Morph {
 				context.lineDashOffset = strokeMorph.dashOffset;
 			}
 		}
+
+		if (this.startBlur !== undefined) {
+			t = this.blurEase(interpolation);
+			this.blur = this.startBlur * (1 - t) + this.endBlur * t;
+		}
 	}
 
 	transform(context) {
@@ -1223,6 +1234,9 @@ class Morph {
 			context.save();
 			me.transform(context);
 			context.globalCompositeOperation = me.blendMode;
+			if (me.blur !== undefined) {
+				context.filter = 'blur(' + me.blur + 'px)';
+			}
 			mainCallback(context, me, interpolation);
 			context.restore();
 
@@ -1250,6 +1264,9 @@ class Morph {
 			context.save();
 			this.transform(context);
 			context.globalCompositeOperation = this.blendMode;
+			if (this.blur !== undefined) {
+				context.filter = 'blur(' + this.blur + 'px)';
+			}
 			callback(context, this, interpolation);
 			context.restore();
 		}
@@ -1531,6 +1548,15 @@ default:
 
 const blendMode = parameters.get('blend') || 'source-over';
 
+let startBlur = parseFloat(parameters.get('blur'));
+let endBlur = parseFloat(parameters.get('blur2'));
+if (!Number.isFinite(startBlur)) {
+	startBlur = undefined;
+}
+if (!Number.isFinite(endBlur)) {
+	endBlur = startBlur;
+}
+
 const numVertices = parseInt(parameters.get('vertices')) || 5;
 //let polygon1 = randomPolygon(numVertices);
 //let polygon2 = randomPolygon(numVertices);
@@ -1630,7 +1656,9 @@ if (Number.isFinite(maxRotation)) {
 	maxRotation = DEFAULT_MAX_ROTATION;
 }
 
-const morph = new Morph(polygon1, polygon2, fillMorph, strokeMorph, blendMode, maxRotation);
+const morph = new Morph(
+	polygon1, polygon2, fillMorph, strokeMorph, blendMode, startBlur, endBlur, maxRotation
+);
 morph.setSpeed(speed);
 
 switch (mode) {
