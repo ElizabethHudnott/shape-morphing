@@ -1556,23 +1556,22 @@ let startLineWidth = parseFloat(parameters.get('line_width'));
 let endLineWidth = parseFloat(parameters.get('line_width2'));
 const hasStartLineWidth = startLineWidth >= 0;
 const hasEndLineWidth = endLineWidth >= 0;
-if (!hasStartLineWidth) {
+if (!Number.isFinite(startLineWidth)) {
 	startLineWidth = undefined;
 }
-if (!hasEndLineWidth) {
+if (!Number.isFinite(endLineWidth)) {
 	endLineWidth = undefined;
 }
+
 let startDashPattern = [], endDashPattern = [];
 let startDashOffset = 0, endDashOffset = 0;
 if (parameters.has('dash')) {
 	startDashPattern = parameters.get('dash').split(',').map(x => parseFloat(x));
 	startDashOffset = parameters.get('dash_offset') || 0;
-	if (!parameters.has('dash2')) {
-		endDashPattern = startDashPattern;
-		endDashOffset = parameters.get('dash_offset2');
-		if (endDashOffset == null) {
-			endDashOffset = startDashOffset;
-		}
+	endDashPattern = startDashPattern;
+	endDashOffset = parameters.get('dash_offset2');
+	if (endDashOffset === null) {
+		endDashOffset = startDashOffset;
 	}
 }
 if (parameters.has('dash2')) {
