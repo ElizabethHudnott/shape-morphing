@@ -1504,9 +1504,7 @@ function drawInterpolatedShape(context, morph, interpolation) {
 function drawFaded(context, morph, interpolation) {
 	const alpha = Math.max(Math.round(1 * 255 / morph.numFrames), 1) / 255;
 	context.globalAlpha = alpha;
-
-	polygonPath(context, morph.pointsX, morph.pointsY);
-	context.fill();
+	drawInterpolatedShape(context, morph, interpolation);
 }
 
 
@@ -1535,7 +1533,7 @@ case 'overlay':
 	mode = Mode.OVERLAY;
 	speed ||= 50;
 	if (!fillMorph) {
-		fillMorph = new ColourMorph('rgb(calc(255-510*t), min(255*t, 255-255*t), calc(510*t-255))');
+		fillMorph = new ColourMorph('rgb(calc(255-510*x), min(255*x, 255-255*x), calc(510*x-255))');
 	}
 	break;
 default:
