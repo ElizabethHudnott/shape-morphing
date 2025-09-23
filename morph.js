@@ -693,11 +693,16 @@ function moveLength(polygon1, polygon2) {
 const Ease = {
 	LINEAR: t => t,
 	QUAD_IN: t => t * t,
-	QUAD_OUT: t => 1 - t * t,
+	QUAD_OUT: t => t * (2 - t),
 	SINE_IN: t => 1 - Math.cos(0.5 * Math.PI * t),
 	SINE_OUT: t => Math.sin(0.5 * Math.PI * t),
 	STEPS_JUMP_END: n => t => Math.trunc(t * n) / n,
+	twoPart: (f, g, x = 0.5, y = 0.5) =>
+		t => t <= x ? y * f(t / x) : (1 - y) * g((t - x) / (1 - x)) + y,
 };
+
+Ease.QUAD_IN_OUT = Ease.twoPart(Ease.QUAD_IN, Ease.QUAD_OUT);
+Ease.SINE_IN_OUT = t => 0.5 - 0.5 * Math.cos(Math.PI * t);
 
 class ConstantColour {
 	constructor(colour) {
@@ -1109,12 +1114,12 @@ class Morph {
 		this.rotation = 0;
 		this.scaleX = 1;
 		this.scaleY = 1;
-		this.translateXEase = Ease.LINEAR;
-		this.translateYEase = Ease.LINEAR;
-		this.rotationEase = Ease.LINEAR;
+		this.translateXEase = Ease.QUAD_IN_OUT;
+		this.translateYEase = Ease.QUAD_IN_OUT;
+		this.rotationEase = Ease.QUAD_IN_OUT;
 		this.scaleXEase = Ease.LINEAR;
 		this.scaleYEase = Ease.LINEAR;
-		this.offsetEase = Ease.SINE_IN;
+		this.offsetEase = Ease.QUAD_IN_OUT;
 
 		this.pointsX = undefined;
 		this.pointsY = undefined;
