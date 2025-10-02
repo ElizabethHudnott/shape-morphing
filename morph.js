@@ -691,16 +691,58 @@ function moveLength(polygon1, polygon2) {
 }
 
 const Ease = {
+	CIRCLE_IN: function (m = Infinity) {
+		if (m === Infinity) {
+			return t => 1 - Math.sqrt(1 - t * t);
+		}
+		const x = 0.5 * (Math.sqrt(4 * m * m + 1) - 1) / m;
+		return t => (1 - Math.sqrt(1 - x * x * t * t)) / x;
+	},
+	EXP_IN: k => t => -Math.exp(-k) * Math.expm1(k * t) / Math.expm1(-k),
+	EXP_OUT: k => t => Math.expm1(-k * t) / Math.expm1(-k),
 	LINEAR: t => t,
 	QUAD_IN: t => t * t,
 	QUAD_OUT: t => t * (2 - t),
 	SINE_IN: t => 1 - Math.cos(0.5 * Math.PI * t),
 	SINE_OUT: t => Math.sin(0.5 * Math.PI * t),
+	STEPS_JUMP_START: n => t => Math.ceil(t * n) / n,
 	STEPS_JUMP_END: n => t => Math.trunc(t * n) / n,
 	twoPart: (f, g, x = 0.5, y = 0.5) =>
 		t => t <= x ? y * f(t / x) : (1 - y) * g((t - x) / (1 - x)) + y,
+	threePart: function (f, g, h, x1, y1, x2, y2) {
+		function ease(t) {
+			if (t <= x1) {
+				return y1 * f(t / x1);
+			} else if (t <= x2) {
+				return (y2 - y1) * g((t - x1) / (x2 - x1)) + y1;
+			} else {
+				return (1 - y2) * h((t - x2) / (1 - x2)) + y2;
+			}
+		}
+		return ease;
+	},
 };
 
+Ease.CIRCLE_OUT = function (m = Infinity) {
+	const f = Ease.CIRCLE_IN(m);
+	return t => f(1) - f(1 - t)
+};
+
+Ease.CIRCLE_IN_OUT = function (m = Infinity, x = 0.5) {
+	if (m === Infinity) {
+		return Ease.twoPart(Ease.CIRCLE_IN(), Ease.CIRCLE_OUT(), x);
+	}
+
+	const xm = 0.5 * (Math.sqrt(4 * m * m + 1) - 1) / m;
+	const bigCircle = t => (1 - Math.sqrt(1 - xm * xm * t * t)) / xm;
+	const bigCircle1 = bigCircle(1);
+	const circleOut = t => bigCircle1 - bigCircle(1 - t);
+	const unscaled =  t => t <= x ? bigCircle(t / x) : circleOut((t - x) / x) + bigCircle1;
+	const max = unscaled(1);
+	return t => unscaled(t) / max;
+}
+
+Ease.EXP_IN_OUT = k => Ease.twoPart(Ease.EXP_IN(k), Ease.EXP_OUT(k));
 Ease.QUAD_IN_OUT = Ease.twoPart(Ease.QUAD_IN, Ease.QUAD_OUT);
 Ease.SINE_IN_OUT = t => 0.5 - 0.5 * Math.cos(Math.PI * t);
 
@@ -1663,6 +1705,10 @@ const morph = new Morph(
 	polygon1, polygon2, fillMorph, strokeMorph, blendMode, startBlur, endBlur, maxRotation
 );
 morph.setSpeed(speed);
+
+let translateEase = Ease.QUAD_IN_OUT;
+morph.translateXEase = translateEase;
+morph.translateYEase = translateEase;
 
 switch (mode) {
 case Mode.ANIMATE:
