@@ -1141,7 +1141,8 @@ class Morph {
 
 	constructor(
 		polygon1, polygon2, fillMorph, strokeMorph, blendMode = 'source-over', startBlur = 0,
-		endBlur = startBlur, maxRotation = DEFAULT_MAX_ROTATION
+		endBlur = startBlur, startShadowLength = 0, endShadowLength = startShadowLength,
+		maxRotation = DEFAULT_MAX_ROTATION
 	) {
 		polygon2.resize(polygon1.size);
 		polygon2.rotate(polygon1, maxRotation);
@@ -1175,6 +1176,12 @@ class Morph {
 		this.endBlur = endBlur;
 		this.blurEase = Ease.LINEAR;
 		this.blur = startBlur;
+
+		this.startShadowLength = startShadowLength;
+		this.endShadowLength = endShadowLength;
+		this.shadowEase = Ease.LINEAR;
+		this.shadowOffsetX = 0;
+		this.shadowOffsetY = 0;
 	}
 
 	setSpeed(speed) {
@@ -1200,7 +1207,7 @@ class Morph {
 		}
 	}
 
-	interpolate(interpolation, context) {
+	interpolate(interpolation, context, lightSourceX, lightSourceY) {
 		const polygon1 = this.polygon1;
 		const polygon2 = this.polygon2;
 		let t;
@@ -1229,9 +1236,39 @@ class Morph {
 		if (this.fillMorph) {
 			this.fillStyle = this.fillMorph.interpolate(this, interpolation, context);
 		}
+		if (this.strokeMorph) {
+			this.strokeMorph.interpolate(this, interpolation);
+		}
+
+		if (this.startBlur !== undefined) {
+			t = this.blurEase(interpolation);
+			this.blur = this.startBlur * (1 - t) + this.endBlur * t;
+		}
+
+		let dx = lightSourceX - this.translateX;
+		let dy = lightSourceY - this.translateY;
+		dx /= this.scaleX;
+		dy /= this.scaleY;
+		if (dx === 0 && dy === 0) {
+			this.shadowOffsetX = 0;
+			this.shadowOffsetY = 0;
+		} else {
+			const hypotenuse = Math.hypot(dx, dy);
+			t = this.shadowEase(interpolation);
+			let shadowLength = this.startShadowLength * (1 - t) + this.endShadowLength * t;
+			this.shadowOffsetX = -dx / hypotenuse * shadowLength;
+			this.shadowOffsetY = -dy / hypotenuse * shadowLength;
+		}
+	}
+
+	transform(context) {
+		context.translate(this.translateX, this.translateY);
+		context.rotate(this.rotation);
+		context.scale(this.scaleX, this.scaleY);
+
+		context.fillStyle = this.fillStyle;
 		const strokeMorph = this.strokeMorph;
 		if (strokeMorph) {
-			strokeMorph.interpolate(this, interpolation);
 			if (strokeMorph.colour !== undefined) {
 				context.strokeStyle = strokeMorph.colour;
 			}
@@ -1244,20 +1281,19 @@ class Morph {
 			}
 		}
 
-		if (this.startBlur !== undefined) {
-			t = this.blurEase(interpolation);
-			this.blur = this.startBlur * (1 - t) + this.endBlur * t;
+		context.shadowColor = 'black';
+		context.shadowOffsetX = this.shadowOffsetX;
+		context.shadowOffsetY = this.shadowOffsetY;
+
+		context.globalCompositeOperation = this.blendMode;
+		if (this.blur !== undefined) {
+			context.filter = 'blur(' + this.blur + 'px)';
 		}
 	}
 
-	transform(context) {
-		context.translate(this.translateX, this.translateY);
-		context.rotate(this.rotation);
-		context.scale(this.scaleX, this.scaleY);
-		context.fillStyle = this.fillStyle;
-	}
-
-	animate(context, mainCallback, beforeCallback = undefined) {
+	animate(
+		context, mainCallback, beforeCallback = undefined, lightSourceX = 0, lightSourceY = 0
+	) {
 		const me = this;
 		let startTime;
 
@@ -1271,7 +1307,7 @@ class Morph {
 				const frameNumber = (time - startTime) * 0.06;
 				interpolation = Math.min(frameNumber * me.interpolationStep, 1);
 			}
-			me.interpolate(interpolation, context);
+			me.interpolate(interpolation, context, lightSourceX, lightSourceY);
 
 			const canvas = context.canvas;
 			context.clearRect(0, 0, canvas.width, canvas.height);
@@ -1280,10 +1316,6 @@ class Morph {
 			}
 			context.save();
 			me.transform(context);
-			context.globalCompositeOperation = me.blendMode;
-			if (me.blur !== undefined) {
-				context.filter = 'blur(' + me.blur + 'px)';
-			}
 			mainCallback(context, me, interpolation);
 			context.restore();
 
@@ -1291,11 +1323,10 @@ class Morph {
 				requestAnimationFrame(drawFrame);
 			}
 		}
-
 		requestAnimationFrame(drawFrame);
 	}
 
-	overlay(context, callback) {
+	overlay(context, callback, lightSourceX = 0, lightSourceY = 0) {
 		this.interpolate(0, context);
 		context.save();
 		this.transform(context);
@@ -1307,13 +1338,9 @@ class Morph {
 			interpolation <= 1;
 			interpolation += this.interpolationStep
 		) {
-			this.interpolate(interpolation, context);
+			this.interpolate(interpolation, context, lightSourceX, lightSourceY);
 			context.save();
 			this.transform(context);
-			context.globalCompositeOperation = this.blendMode;
-			if (this.blur !== undefined) {
-				context.filter = 'blur(' + this.blur + 'px)';
-			}
 			callback(context, this, interpolation);
 			context.restore();
 		}
@@ -1523,13 +1550,11 @@ function drawSourceShapes(context, morph, interpolation) {
 	const polygon2 = morph.polygon2;
 
 	polygonPath(context, polygon1.pointsX, polygon1.pointsY);
-	context.globalAlpha = 0.7;
-	context.fillStyle = '#ffc';
+	context.fillStyle = 'rgba(255, 255, 192, 70%)';
 	context.fill();
 
 	polygonPath(context, polygon2.pointsX, polygon2.pointsY);
-	context.globalAlpha = 0.39;
-	context.fillStyle = '#ccc';
+	context.fillStyle = 'rgba(192, 192, 192, 39%)';
 	context.fill();
 }
 
@@ -1544,6 +1569,7 @@ function drawInterpolatedShape(context, morph, interpolation) {
 			strokeMorph.end
 		);
 		context.globalAlpha = 1;
+		context.shadowColor = 'transparent';
 		context.stroke();
 	}
 }
@@ -1587,7 +1613,7 @@ default:
 	mode = Mode.ANIMATE;
 	speed ||= 5;
 	if (!fillMorph) {
-		fillMorph = new ConstantColour('lime');
+		fillMorph = new ConstantColour('#00ff0063');
 	}
 }
 
@@ -1696,13 +1722,16 @@ if (startLineWidth > 0 || endLineWidth > 0) {
 
 let maxRotation = parseInt(parameters.get('max_rotation'));
 if (Number.isFinite(maxRotation)) {
-	maxRotation *= 180 / Math.PI;
+	maxRotation *= Math.PI / 180;
 } else {
 	maxRotation = DEFAULT_MAX_ROTATION;
 }
 
+let shadowLength = 30;
+
 const morph = new Morph(
-	polygon1, polygon2, fillMorph, strokeMorph, blendMode, startBlur, endBlur, maxRotation
+	polygon1, polygon2, fillMorph, strokeMorph, blendMode, startBlur, endBlur, shadowLength,
+	shadowLength, maxRotation
 );
 morph.setSpeed(speed);
 
@@ -1713,7 +1742,7 @@ morph.translateYEase = translateEase;
 switch (mode) {
 case Mode.ANIMATE:
 	// Draw as an animation.
-	morph.animate(context, drawInterpolatedShape, drawSourceShapes);
+	morph.animate(context, drawInterpolatedShape, drawSourceShapes, 0.5 * canvas.width);
 	break;
 case Mode.OVERLAY:
 	// Draw with successive frames overlaid on top of each other.
