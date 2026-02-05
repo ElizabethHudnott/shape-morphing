@@ -747,6 +747,9 @@ Ease.QUAD_IN_OUT = Ease.twoPart(Ease.QUAD_IN, Ease.QUAD_OUT);
 Ease.SINE_IN_OUT = t => 0.5 - 0.5 * Math.cos(Math.PI * t);
 
 class ConstantColour {
+
+	static BLACK = new ConstantColour('black');
+
 	constructor(colour) {
 		this.colour = colour;
 	}
@@ -1137,12 +1140,54 @@ class StrokeMorph {
 
 }
 
+class ShadowMorph {
+
+	constructor(startLength, endLength, blur = 0.25, colourMorph = ConstantColour.BLACK) {
+		this.startLength = startLength;
+		this.endLength = endLength;
+		this.lengthEase = Ease.QUAD_IN_OUT;
+		this.blurFraction = blur;
+		this.colourMorph = colourMorph;
+
+		this.offsetX = 0;
+		this.offsetY = 0;
+		this.blur = 0;
+		this.colour = 'black';
+	}
+
+	interpolate(morph, interpolation, lightSourceX, lightSourceY) {
+		const t = this.lengthEase(interpolation);
+		let length = this.startLength * (1 - t) + this.endLength * t;
+		length += (morph.strokeMorph?.width || 0) * 0.5;
+		const numPoints = morph.polygon2.numPoints;
+		const translateX = morph.translateX, translateY = morph.translateY;
+		let sumOffsetX = 0, sumOffsetY = 0;
+		for (let i = 0; i < numPoints; i++) {
+			let dx = lightSourceX - translateX - morph.pointsX[i];
+			let dy = lightSourceY - translateY - morph.pointsY[i];
+			if (dx !== 0 || dy !== 0) {
+				dx /= morph.scaleX;
+				dy /= morph.scaleY;
+				const hypotenuse = Math.hypot(dx, dy);
+				const offsetX = -dx / hypotenuse * length;
+				const offsetY = -dy / hypotenuse * length;
+				sumOffsetX += offsetX;
+				sumOffsetY += offsetY;
+			}
+		}
+		this.offsetX = sumOffsetX / numPoints;
+		this.offsetY = sumOffsetY / numPoints;
+		this.blur = this.blurFraction * length;
+		this.colour = this.colourMorph.interpolate(morph, interpolation);
+	}
+
+}
+
 class Morph {
 
 	constructor(
-		polygon1, polygon2, fillMorph, strokeMorph, blendMode = 'source-over', startBlur = 0,
-		endBlur = startBlur, startShadowLength = 0, endShadowLength = startShadowLength,
-		shadowBlur = 0.25, maxRotation = DEFAULT_MAX_ROTATION
+		polygon1, polygon2, fillMorph, strokeMorph, shadowMorph, blendMode = 'source-over',
+		startBlur = 0, endBlur = startBlur, maxRotation = DEFAULT_MAX_ROTATION
 	) {
 		polygon2.resize(polygon1.size);
 		polygon2.rotate(polygon1, maxRotation);
@@ -1170,20 +1215,13 @@ class Morph {
 		this.fillStyle = 'black';
 		this.strokeMorph = strokeMorph;
 		this.stroke = undefined;
+		this.shadowMorph = shadowMorph;
 		this.blendMode = blendMode;
 
 		this.startBlur = startBlur;
 		this.endBlur = endBlur;
 		this.blurEase = Ease.LINEAR;
 		this.blur = startBlur;
-
-		this.startShadowLength = startShadowLength;
-		this.endShadowLength = endShadowLength;
-		this.shadowEase = Ease.LINEAR;
-		this.shadowBlur = shadowBlur;
-		this.shadowLength = 0;
-		this.shadowOffsetX = 0;
-		this.shadowOffsetY = 0;
 	}
 
 	setSpeed(speed) {
@@ -1241,32 +1279,14 @@ class Morph {
 		if (this.strokeMorph) {
 			this.strokeMorph.interpolate(this, interpolation);
 		}
+		if (this.shadowMorph) {
+			this.shadowMorph.interpolate(this, interpolation, lightSourceX, lightSourceY);
+		}
 
 		if (this.startBlur !== undefined) {
 			t = this.blurEase(interpolation);
 			this.blur = this.startBlur * (1 - t) + this.endBlur * t;
 		}
-
-		t = this.shadowEase(interpolation);
-		this.shadowLength = this.startShadowLength * (1 - t) + this.endShadowLength * t;
-		const strokeOffset = (this.strokeMorph?.width || 0) * 0.5;
-		this.shadowOffsetX = 0;
-		this.shadowOffsetY = 0;
-		for (let i = 0; i < numPoints; i++) {
-			let dx = lightSourceX - this.translateX - this.pointsX[i];
-			let dy = lightSourceY - this.translateY - this.pointsY[i];
-			if (dx !== 0 || dy !== 0) {
-				dx /= this.scaleX;
-				dy /= this.scaleY;
-				const hypotenuse = Math.hypot(dx, dy);
-				const offsetX = -dx / hypotenuse * this.shadowLength;
-				const offsetY = -dy / hypotenuse * this.shadowLength;
-				this.shadowOffsetX += offsetX + strokeOffset * Math.sign(offsetX);
-				this.shadowOffsetY += offsetY + strokeOffset * Math.sign(offsetY);
-			}
-		}
-		this.shadowOffsetX /= numPoints;
-		this.shadowOffsetY /= numPoints;
 	}
 
 	transform(context) {
@@ -1289,10 +1309,12 @@ class Morph {
 			}
 		}
 
-		context.shadowColor = 'black';
-		context.shadowOffsetX = this.shadowOffsetX;
-		context.shadowOffsetY = this.shadowOffsetY;
-		context.shadowBlur = this.shadowBlur * this.shadowLength;
+		if (this.shadowMorph) {
+			context.shadowOffsetX = this.shadowMorph.offsetX;
+			context.shadowOffsetY = this.shadowMorph.offsetY;
+			context.shadowBlur = this.shadowMorph.blur;
+			context.shadowColor = this.shadowMorph.colour;
+		}
 
 		context.globalCompositeOperation = this.blendMode;
 		if (this.blur !== undefined) {
@@ -1566,7 +1588,7 @@ function drawSourceShapes(context, morph, interpolation) {
 	context.fillStyle = 'rgba(224, 192, 192, 39%)';
 	context.fill();
 
-	if (morph.startShadowLength !== 0 || morph.endShadowLength !== 0) {
+	if (morph.shadowMorph) {
 		context.beginPath();
 		context.arc(sunX, sunY, 35, 0, 2 * Math.PI);
 		context.fillStyle = 'rgba(255, 192, 0, 30%)';
@@ -1613,7 +1635,7 @@ let mode, fillMorph;
 
 const fillStr = parameters.get('fill');
 if (fillStr) {
-	// Use %25 to write % inside a URL and %2B to write +.
+	// Use %25 to write % inside a URL, %2B to write +, %23 to write #.
 	fillMorph = new ColourMorph(fillStr);
 }
 
@@ -1758,6 +1780,16 @@ if (!Number.isFinite(shadowBlur)) {
 	shadowBlur = 0.4;
 }
 
+let shadowMorph = undefined;
+if (startShadowLength !== 0 || endShadowLength !== 0) {
+	const shadowColourStr = parameters.get('shadow_colour');
+	const shadowColourMorph = shadowColourStr ?
+		new ColourMorph(shadowColourStr) : ConstantColour.BLACK;
+	shadowMorph = new ShadowMorph(
+		startShadowLength, endShadowLength, shadowBlur, shadowColourMorph
+	);
+}
+
 let sunX = parseFloat(parameters.get('sun_x'));
 if (!Number.isFinite(sunX)) {
 	sunX = 0.5;
@@ -1767,8 +1799,8 @@ let sunY = parseFloat(parameters.get('sun_y')) || 0;
 sunY *= canvas.height;
 
 const morph = new Morph(
-	polygon1, polygon2, fillMorph, strokeMorph, blendMode, startBlur, endBlur,
-	startShadowLength, endShadowLength, shadowBlur, maxRotation
+	polygon1, polygon2, fillMorph, strokeMorph, shadowMorph, blendMode, startBlur, endBlur,
+	maxRotation
 );
 morph.setSpeed(speed);
 
