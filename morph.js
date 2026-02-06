@@ -801,7 +801,98 @@ class VertexGradientMorph {
 
 }
 
-class EdgeGradientMorph {
+class EdgeParallelGradientMorph {
+
+	constructor(vertexNum, colourMorphs, offsets = [0, 1]) {
+		this.vertexNum = vertexNum;
+		this.colourMorphs = colourMorphs;
+		this.offsets = offsets;
+	}
+
+	interpolate(morph, interpolation, context) {
+		const pointsX = morph.pointsX;
+		const pointsY = morph.pointsY;
+		const numPoints = pointsX.length;
+		const vertex1 =  this.vertexNum;
+		const vertex2 = (vertex1 + 1) % numPoints;
+		const edgeX1 = pointsX[vertex1];
+		const edgeY1 = pointsY[vertex1];
+		const edgeX2 = pointsX[vertex2];
+		const edgeY2 = pointsY[vertex2];
+		const edgeDeltaX = edgeX2 - edgeX1;
+		const edgeDeltaY = edgeY2 - edgeY1;
+		// Line 1: Our edge
+		// Line 2: Perpendicular to our edge running through another vertex
+		// a1 * x + b1 * y + c1 = 0
+		// a2 * x + b2 * y + c2 = 0
+		let a1, b1, c1, a2, b2;
+		if (edgeDeltaX === 0) {
+			// x = -c1
+			a1 = 1;
+			b1 = 0;
+			c1 = -edgeX1;
+			// y = -c2
+			a2 = 0;
+			b2 = 1;
+		} else if (edgeDeltaY === 0) {
+			// y = -c1
+			a1 = 0;
+			b1 = 1;
+			c1 = -edgeY1;
+			// x = -c2
+			a2 = 1;
+			b2 = 0;
+		} else {
+			a1 = -edgeDeltaY / edgeDeltaX;
+			b1 = 1;
+			c1 = -a1 * edgeX1 - edgeY1;
+			a2 = edgeDeltaX / edgeDeltaY;
+			b2 = 1;
+		}
+
+		// Min and max x values and associated y values or min and max y and associated
+		// constant x value.
+		let minX, maxX, minY, maxY;
+		if (edgeX1 < edgeX2 || (edgeDeltaX === 0 && edgeY1 < edgeY2)) {
+			[minX, minY, maxX, maxY] = [edgeX1, edgeY1, edgeX2, edgeY2];
+		} else {
+			[minX, minY, maxX, maxY] = [edgeX2, edgeY2, edgeX1, edgeY1];
+		}
+
+		for (let i = 1; i <= numPoints - 2; i++) {
+			const targetVertex = (vertex2 + i) % numPoints;
+			const targetX = pointsX[targetVertex];
+			const targetY = pointsY[targetVertex];
+			const c2 = -a2 * targetX - b2 * targetY;
+			const denominator = a1 * b2 - a2 * b1;
+			const intersectX = (b1 * c2 - b2 * c1) / denominator;
+			const intersectY = (c1 * a2 - c2 * a1) / denominator;
+			if (edgeDeltaX !== 0) {
+				if (intersectX < minX) {
+					[minX, minY] = [intersectX, intersectY];
+				} else if (intersectX > maxX) {
+					[maxX, maxY] = [intersectX, intersectY];
+				}
+			} else {
+				if (intersectY < minY) {
+					minY = intersectY;
+				} else if (intersectY > maxY) {
+					maxY = intersectY;
+				}
+			}
+		}
+
+		const gradient = context.createLinearGradient(minX, minY, maxX, maxY);
+		for (let i = 0; i < this.offsets.length; i++) {
+			const colour = this.colourMorphs[i].interpolate(morph, interpolation);
+			gradient.addColorStop(this.offsets[i], colour);
+		}
+		return gradient;
+	}
+
+}
+
+class EdgePerpendicularGradientMorph {
 
 	constructor(vertexNum, colourMorphs, offsets = [0, 1]) {
 		this.vertexNum = vertexNum;
@@ -1678,11 +1769,19 @@ if (mode === Mode.OVERLAY && polygon2.size > polygon1.size) {
 
 const fillStr2 = parameters.get('fill2');
 if (fillStr2) {
-	const fromVertex = 0;
-	const toVertex = Math.trunc(numVertices / 2);
 	const toColour = new ColourMorph(fillStr2);
-	//fillMorph = new VertexGradientMorph(fromVertex, toVertex, [fillMorph, toColour]);
-	fillMorph = new EdgeGradientMorph(fromVertex, [fillMorph, toColour]);
+	gradientType = parseInt(parameters.get('gradient'));
+	switch (gradientType) {
+	case 2:
+		fillMorph = new EdgeParallelGradientMorph(0, [fillMorph, toColour]);
+		break;
+	case 3:
+		const toVertex = Math.trunc(numVertices / 2);
+		fillMorph = new VertexGradientMorph(0, toVertex, [fillMorph, toColour]);
+		break;
+	default:
+		fillMorph = new EdgePerpendicularGradientMorph(0, [fillMorph, toColour]);
+	}
 }
 
 const DEFAULT_LINE_WIDTH = 2;
