@@ -853,10 +853,12 @@ class EdgeParallelGradientMorph {
 		// Min and max x values and associated y values or min and max y and associated
 		// constant x value.
 		let minX, maxX, minY, maxY;
+		let invertDirection = false;
 		if (edgeX1 < edgeX2 || (edgeDeltaX === 0 && edgeY1 < edgeY2)) {
 			[minX, minY, maxX, maxY] = [edgeX1, edgeY1, edgeX2, edgeY2];
 		} else {
 			[minX, minY, maxX, maxY] = [edgeX2, edgeY2, edgeX1, edgeY1];
+			invertDirection = true;
 		}
 
 		for (let i = 1; i <= numPoints - 2; i++) {
@@ -882,7 +884,12 @@ class EdgeParallelGradientMorph {
 			}
 		}
 
-		const gradient = context.createLinearGradient(minX, minY, maxX, maxY);
+		let gradient;
+		if (!invertDirection) {
+			gradient = context.createLinearGradient(minX, minY, maxX, maxY);
+		} else {
+			gradient = context.createLinearGradient(maxX, maxY, minX, minY);
+		}
 		for (let i = 0; i < this.offsets.length; i++) {
 			const colour = this.colourMorphs[i].interpolate(morph, interpolation);
 			gradient.addColorStop(this.offsets[i], colour);
