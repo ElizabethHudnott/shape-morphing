@@ -791,7 +791,7 @@ class VertexGradientMorph {
 		const y1 = morph.pointsY[this.vertexNum1];
 		const x2 = morph.pointsX[this.vertexNum2];
 		const y2 = morph.pointsY[this.vertexNum2];
-		const gradient = context.createLinearGradient(x1, y2, x2, y2);
+		const gradient = context.createLinearGradient(x1, y1, x2, y2);
 		for (let i = 0; i < this.offsets.length; i++) {
 			const colour = this.colourMorphs[i].interpolate(morph, interpolation);
 			gradient.addColorStop(this.offsets[i], colour);
