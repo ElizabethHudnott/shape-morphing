@@ -1118,6 +1118,25 @@ class VertexConicGradientMorph {
 
 }
 
+class CentreConicGradientMorph {
+
+	constructor(colourMorphs, offsets = [0, 1], startAngle = 0) {
+		this.startAngle = startAngle;
+		this.colourMorphs = colourMorphs;
+		this.offsets = offsets;
+	}
+
+	interpolate(morph, interpolation, context) {
+		const gradient = context.createConicGradient(this.startAngle, 0, 0);
+		for (let i = 0; i < this.offsets.length; i++) {
+			const colour = this.colourMorphs[i].interpolate(morph, interpolation);
+			gradient.addColorStop(this.offsets[i], colour);
+		}
+		return gradient;
+	}
+
+}
+
 class StrokeStyle {
 	constructor() {
 		this.width = undefined;
@@ -1819,6 +1838,7 @@ if (fillStr2) {
 	 * 2 Along an edge
 	 * 3 Vertex to vertex
 	 * 4 Around a vertex
+	 * 5 Around the centre
 	 */
 	switch (gradientType) {
 	case 2:
@@ -1830,6 +1850,9 @@ if (fillStr2) {
 		break;
 	case 4:
 		fillMorph = new VertexConicGradientMorph(0, [fillMorph, toColour]);
+		break;
+	case 5:
+		fillMorph = new CentreConicGradientMorph([fillMorph, toColour, fillMorph], [0, 0.5, 1]);
 		break;
 	default:
 		fillMorph = new EdgePerpendicularGradientMorph(0, [fillMorph, toColour]);
