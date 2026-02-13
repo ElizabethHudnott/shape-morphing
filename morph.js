@@ -1081,6 +1081,43 @@ class EdgePerpendicularGradientMorph {
 
 }
 
+class VertexConicGradientMorph {
+
+	constructor(vertexNum, colourMorphs, offsets = [0, 1]) {
+		this.vertexNum = vertexNum;
+		this.colourMorphs = colourMorphs;
+		this.offsets = offsets;
+	}
+
+	interpolate(morph, interpolation, context) {
+		const pointsX = morph.pointsX;
+		const pointsY = morph.pointsY;
+		const numPoints = pointsX.length
+		const vertex1 = (this.vertexNum + numPoints - 1) % numPoints;
+		const vertex2 =  this.vertexNum;
+		const vertex3 = (vertex2 + 1) % numPoints;
+		const x1 = pointsX[vertex1];
+		const y1 = pointsY[vertex1];
+		const x2 = pointsX[vertex2];
+		const y2 = pointsY[vertex2];
+		const x3 = pointsX[vertex3];
+		const y3 = pointsY[vertex3];
+		const startAngle = Math.atan2(y1 - y2, x1 - x2);
+		let endAngle = Math.atan2(y3 - y2, x3 - x2);
+		if (endAngle < startAngle) {
+			endAngle += 2 * Math.PI;
+		}
+		const turnAmount = (endAngle - startAngle) / (2 * Math.PI);
+		const gradient = context.createConicGradient(startAngle, x2, y2);
+		for (let i = 0; i < this.offsets.length; i++) {
+			const colour = this.colourMorphs[i].interpolate(morph, interpolation);
+			gradient.addColorStop(turnAmount * this.offsets[i], colour);
+		}
+		return gradient;
+	}
+
+}
+
 class StrokeStyle {
 	constructor() {
 		this.width = undefined;
@@ -1778,6 +1815,11 @@ const fillStr2 = parameters.get('fill2');
 if (fillStr2) {
 	const toColour = new ColourMorph(fillStr2);
 	gradientType = parseInt(parameters.get('gradient'));
+	/* 1 Edge to vertex
+	 * 2 Along an edge
+	 * 3 Vertex to vertex
+	 * 4 Around a vertex
+	 */
 	switch (gradientType) {
 	case 2:
 		fillMorph = new EdgeParallelGradientMorph(0, [fillMorph, toColour]);
@@ -1785,6 +1827,9 @@ if (fillStr2) {
 	case 3:
 		const toVertex = Math.trunc(numVertices / 2);
 		fillMorph = new VertexGradientMorph(0, toVertex, [fillMorph, toColour]);
+		break;
+	case 4:
+		fillMorph = new VertexConicGradientMorph(0, [fillMorph, toColour]);
 		break;
 	default:
 		fillMorph = new EdgePerpendicularGradientMorph(0, [fillMorph, toColour]);
