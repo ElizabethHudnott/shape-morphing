@@ -1120,14 +1120,18 @@ class VertexConicGradientMorph {
 
 class CentreConicGradientMorph {
 
-	constructor(colourMorphs, offsets = [0, 1], startAngle = 0) {
+	constructor(colourMorphs, offsets = [0, 1], startAngle = 0, endAngle = startAngle) {
 		this.startAngle = startAngle;
+		this.endAngle = endAngle;
+		this.angleEase = Ease.LINEAR;
 		this.colourMorphs = colourMorphs;
 		this.offsets = offsets;
 	}
 
 	interpolate(morph, interpolation, context) {
-		const gradient = context.createConicGradient(this.startAngle, 0, 0);
+		const t = this.angleEase(interpolation);
+		const angle = this.endAngle * t + this.startAngle * (1 - t);
+		const gradient = context.createConicGradient(angle, 0, 0);
 		for (let i = 0; i < this.offsets.length; i++) {
 			const colour = this.colourMorphs[i].interpolate(morph, interpolation);
 			gradient.addColorStop(this.offsets[i], colour);
@@ -1852,7 +1856,11 @@ if (fillStr2) {
 		fillMorph = new VertexConicGradientMorph(0, [fillMorph, toColour]);
 		break;
 	case 5:
-		fillMorph = new CentreConicGradientMorph([fillMorph, toColour, fillMorph], [0, 0.5, 1]);
+		const spin = (parseFloat(parameters.get('spin')) || 0) * Math.PI / 180;
+		fillMorph = new CentreConicGradientMorph(
+			[fillMorph, toColour, fillMorph], [0, 0.5, 1], 0, spin
+		);
+		fillMorph.angleEase = Ease.EXP_OUT(3);
 		break;
 	default:
 		fillMorph = new EdgePerpendicularGradientMorph(0, [fillMorph, toColour]);
