@@ -1,4 +1,5 @@
 const DEFAULT_MAX_ROTATION = Math.PI / 2;
+const DEBUG = false;
 
 const numericAscending = (a, b) => a - b;
 const numericDescending = (a, b) => b - a;
@@ -39,6 +40,32 @@ function choices(n, m) {
 		allChoices.push(choice);
 	}
 	return allChoices;
+}
+
+
+/**
+ * Line 1: An edge
+ * Line 2: Perpendicular to the edge and running through another specified point
+ * a1 * x + b1 * y + c1 = 0
+ * a2 * x + b2 * y + c2 = 0
+ * @return {number[]} [x2 - x1, a1, b1, c1, a2, b2]
+ */
+function projectOntoLine(x1, y1, x2, y2) {
+	const deltaX = x2 - x1;
+	const deltaY = y2 - y1;
+	if (deltaX === 0) {
+		// x = -c1
+		// y = -c2
+		return [deltaX, 1, 0, -x1, 0, 1];
+
+	} else if (deltaY === 0) {
+		// y = -c1
+		// x = -c2
+		return [deltaX, 0, 1, -y1, 1, 0];
+	}
+
+	const a1 = -deltaY / deltaX;
+	return [deltaX, a1, 1, -a1 * x1 - y1, deltaX / deltaY, 1];
 }
 
 function sortVertical(pointsX, pointsY, startIndex, endIndex) {
@@ -266,6 +293,25 @@ class Shape {
 		}
 	}
 
+	/**Adds a new vertex without recalculating the centre point or average radius.
+	 * @param {number} index The index of the vertex which should end up immediately preceding
+	 * the new vertex.
+	 */
+	addVertex(index, x, y) {
+		this.pointsX.splice(index, 0, x);
+		this.pointsY.splice(index, 0, y);
+		const dx = x - this.centreX;
+		const dy = y - this.centreY;
+		this.deltaX.splice(index, 0, dx);
+		this.deltaY.splice(index, 0, dy);
+		const radius = Math.hypot(dx, dy);
+		const angle = Math.atan2(dy, dx);
+		this.radii.splice(index, 0, radius);
+		this.angles.splice(index, 0, angle);
+		this.resizedX.splice(index, 0, radius * Math.cos(angle));
+		this.resizedY.splice(index, 0, radius * Math.sin(angle));
+	}
+
 	/**Computes a new set of points by rotating the scaled shape to align with the target shape
 	 * as best as possible and stores the rectangular coordinates of the new points in
 	 * this.rotatedX and this.rotatedY, along with the residual displacement vectors in
@@ -288,8 +334,6 @@ class Shape {
 		let minErrorAlignmentIndex = 0;
 		for (let i = 0; i < minNumPoints; i++) {
 			minErrorChoice[i] = Math.trunc(i * maxNumPoints / numPoints);
-		}
-		for (let i = 0; i < minNumPoints; i++) {
 			minErrorChoice2[i] = Math.trunc(i * maxNumPoints / numPoints2);
 		}
 
@@ -365,8 +409,20 @@ class Shape {
 			offsetsX[sourceIndex] = selectedRotatedX[sourceIndex] - shape2.resizedX[targetIndex];
 			offsetsY[sourceIndex] = selectedRotatedY[sourceIndex] - shape2.resizedY[targetIndex];
 		}
-		if (numPoints > numPoints2) {
-
+		if (numPoints < numPoints2) {
+			let lastTarget = minErrorChoice2[minErrorAlignmentIndex];
+			for (let i = 1; i < minNumPoints; i++) {
+				const nextTarget = minErrorChoice2[(minErrorAlignmentIndex + i) % minNumPoints];
+				let numIntermediate = nextTarget - lastTarget;
+				if (numIntermediate < 0) {
+					numIntermediate += minNumPoints;
+				}
+				for (let j = 1; j <= numIntermediate; j++) {
+					const target = (lastTarget + j) % minNumPoints;
+					console.log(target);
+				}
+				lastTarget = nextTarget;
+			}
 		}
 		this.offsetsX = offsetsX;
 		this.offsetsY = offsetsY;
@@ -384,6 +440,9 @@ function randomPolygon(numPoints) {
 	return new Shape(pointsX, pointsY);
 }
 
+/**Returns a value from a probability distribution which has a 50% chance of being between
+ * minFraction and 1 and a 50% of being between 1 and maxValue.
+*/
 function randomFraction(minFraction, maxValue) {
 	const r = Math.random() * 2 * (maxValue - 1);
 	if (r >= maxValue - 1) {
@@ -496,7 +555,7 @@ function centreValues(values, centre) {
 	}
 }
 
-function layoutPolygons(pointsGenerator, numPoints) {
+function layoutPolygons(pointsGenerator, numPoints, numPoints2 = numPoints) {
 	let width1, height1, width2, height2;
 	let pointsX1, pointsY1, pointsX2, pointsY2;
 	const width = canvas.width;
@@ -510,7 +569,7 @@ function layoutPolygons(pointsGenerator, numPoints) {
 		width2 = (0.5 * (3 + Math.random()) / 3) * width;
 		height2 = Math.min(width2 / (Math.random() + 1), 2/3 * height);
 		[pointsX1, pointsY1] = pointsGenerator(numPoints, 0.5 * width1, 0.5 * height1);
-		[pointsX2, pointsY2] = pointsGenerator(numPoints, 0.5 * width2, 0.5 * height2);
+		[pointsX2, pointsY2] = pointsGenerator(numPoints2, 0.5 * width2, 0.5 * height2);
 		alignLeftOrTop(pointsX1);
 		alignRightOrBottom(pointsX2, width);
 		if (r < 0.25) {
@@ -528,7 +587,7 @@ function layoutPolygons(pointsGenerator, numPoints) {
 		width2 = (0.5 * (3 + Math.random()) / 3) * width;
 		height2 = Math.min(width2 / (Math.random() + 1), 0.5 * height);
 		[pointsX1, pointsY1] = pointsGenerator(numPoints, 0.5 * width1, 0.5 * height1);
-		[pointsX2, pointsY2] = pointsGenerator(numPoints, 0.5 * width2, 0.5 * height2);
+		[pointsX2, pointsY2] = pointsGenerator(numPoints2, 0.5 * width2, 0.5 * height2);
 		centreValues(pointsY1, 0.5 * height);
 		centreValues(pointsY2, 0.5 * height);
 		if (r < 0.75) {
@@ -541,7 +600,7 @@ function layoutPolygons(pointsGenerator, numPoints) {
 	}
 	const shape1 = new Shape(pointsX1, pointsY1);
 	const shape2 = new Shape(pointsX2, pointsY2);
-	return Math.random() < 0.5 ? [shape1, shape2] : [shape2, shape1];
+	return DEBUG || Math.random() < 0.5 ? [shape1, shape2] : [shape2, shape1];
 }
 
 function polygonPath(context, pointsX, pointsY) {
@@ -819,36 +878,7 @@ class EdgeParallelGradientMorph {
 		const edgeY1 = pointsY[vertex1];
 		const edgeX2 = pointsX[vertex2];
 		const edgeY2 = pointsY[vertex2];
-		const edgeDeltaX = edgeX2 - edgeX1;
-		const edgeDeltaY = edgeY2 - edgeY1;
-		// Line 1: Our edge
-		// Line 2: Perpendicular to our edge running through another vertex
-		// a1 * x + b1 * y + c1 = 0
-		// a2 * x + b2 * y + c2 = 0
-		let a1, b1, c1, a2, b2;
-		if (edgeDeltaX === 0) {
-			// x = -c1
-			a1 = 1;
-			b1 = 0;
-			c1 = -edgeX1;
-			// y = -c2
-			a2 = 0;
-			b2 = 1;
-		} else if (edgeDeltaY === 0) {
-			// y = -c1
-			a1 = 0;
-			b1 = 1;
-			c1 = -edgeY1;
-			// x = -c2
-			a2 = 1;
-			b2 = 0;
-		} else {
-			a1 = -edgeDeltaY / edgeDeltaX;
-			b1 = 1;
-			c1 = -a1 * edgeX1 - edgeY1;
-			a2 = edgeDeltaX / edgeDeltaY;
-			b2 = 1;
-		}
+		const [edgeDeltaX, a1, b1, c1, a2, b2] = projectOntoLine(edgeX1, edgeY1, edgeX2, edgeY2);
 
 		// Min and max x values and associated y values or min and max y and associated
 		// constant x value.
@@ -922,36 +952,7 @@ class EdgePerpendicularGradientMorph {
 		const edgeY1 = pointsY[vertex1];
 		const edgeX2 = pointsX[vertex2];
 		const edgeY2 = pointsY[vertex2];
-		const edgeDeltaX = edgeX2 - edgeX1;
-		const edgeDeltaY = edgeY2 - edgeY1;
-		// Line 1: Our edge
-		// Line 2: Perpendicular to our edge running through another vertex
-		// a1 * x + b1 * y + c1 = 0
-		// a2 * x + b2 * y + c2 = 0
-		let a1, b1, c1, a2, b2;
-		if (edgeDeltaX === 0) {
-			// x = -c1
-			a1 = 1;
-			b1 = 0;
-			c1 = -edgeX1;
-			// y = -c2
-			a2 = 0;
-			b2 = 1;
-		} else if (edgeDeltaY === 0) {
-			// y = -c1
-			a1 = 0;
-			b1 = 1;
-			c1 = -edgeY1;
-			// x = -c2
-			a2 = 1;
-			b2 = 0;
-		} else {
-			a1 = -edgeDeltaY / edgeDeltaX;
-			b1 = 1;
-			c1 = -a1 * edgeX1 - edgeY1;
-			a2 = edgeDeltaX / edgeDeltaY;
-			b2 = 1;
-		}
+		const [edgeDeltaX, a1, b1, c1, a2, b2] = projectOntoLine(edgeX1, edgeY1, edgeX2, edgeY2);
 
 		let maxDistanceSq = 0;
 		let targetVertex = 0;
@@ -1033,36 +1034,7 @@ class EdgePerpendicularGradientMorph {
 		const edgeY1 = pointsY[vertex1];
 		const edgeX2 = pointsX[vertex2];
 		const edgeY2 = pointsY[vertex2];
-		const edgeDeltaX = edgeX2 - edgeX1;
-		const edgeDeltaY = edgeY2 - edgeY1;
-		// Line 1: Our edge
-		// Line 2: Perpendicular to our edge running through another vertex
-		// a1 * x + b1 * y + c1 = 0
-		// a2 * x + b2 * y + c2 = 0
-		let a1, b1, c1, a2, b2;
-		if (edgeDeltaX === 0) {
-			// x = -c1
-			a1 = 1;
-			b1 = 0;
-			c1 = -edgeX1;
-			// y = -c2
-			a2 = 0;
-			b2 = 1;
-		} else if (edgeDeltaY === 0) {
-			// y = -c1
-			a1 = 0;
-			b1 = 1;
-			c1 = -edgeY1;
-			// x = -c2
-			a2 = 1;
-			b2 = 0;
-		} else {
-			a1 = -edgeDeltaY / edgeDeltaX;
-			b1 = 1;
-			c1 = -a1 * edgeX1 - edgeY1;
-			a2 = edgeDeltaX / edgeDeltaY;
-			b2 = 1;
-		}
+		const [edgeDeltaX, a1, b1, c1, a2, b2] = projectOntoLine(edgeX1, edgeY1, edgeX2, edgeY2);
 
 		const x2 = pointsX[this.targetVertex];
 		const y2 = pointsY[this.targetVertex];
@@ -1825,13 +1797,12 @@ if (!Number.isFinite(endBlur)) {
 }
 
 const numVertices = parseInt(parameters.get('vertices')) || 5;
+const numVertices2 = parseInt(parameters.get('vertices2')) || numVertices;
 //let polygon1 = randomPolygon(numVertices);
-//let polygon2 = randomPolygon(numVertices);
-let [polygon1, polygon2] = layoutPolygons(cyclicPolygonPoints, numVertices);
+//let polygon2 = randomPolygon(numVertices2);
+let [polygon1, polygon2] = layoutPolygons(cyclicPolygonPoints, numVertices, numVertices2);
 if (mode === Mode.OVERLAY && polygon2.size > polygon1.size) {
-	const temp = polygon1;
-	polygon1 = polygon2;
-	polygon2 = temp;
+	[polygon1, polygon2] = [polygon2, polygon1];
 }
 
 const fillStr2 = parameters.get('fill2');
@@ -1999,4 +1970,3 @@ case Mode.OVERLAY:
 	// Draw with successive frames overlaid on top of each other.
 	morph.overlay(context, drawFaded, sunX, sunY);
 }
-
