@@ -50,7 +50,7 @@ function choices(n, m) {
  * a2 * x + b2 * y + c2 = 0
  * @return {number[]} [x2 - x1, a1, b1, c1, a2, b2]
  */
-function projectOntoLine(x1, y1, x2, y2) {
+function projectionOntoLine(x1, y1, x2, y2) {
 	const deltaX = x2 - x1;
 	const deltaY = y2 - y1;
 	if (deltaX === 0) {
@@ -66,6 +66,48 @@ function projectOntoLine(x1, y1, x2, y2) {
 
 	const a1 = -deltaY / deltaX;
 	return [deltaX, a1, 1, -a1 * x1 - y1, deltaX / deltaY, 1];
+}
+
+function projectOntoLine(pointX, pointY, a1, b1, c1, a2, b2) {
+	const c2 = -a2 * pointX - b2 * pointY;
+	const denominator = a1 * b2 - a2 * b1;
+	const intersectX = (b1 * c2 - b2 * c1) / denominator;
+	const intersectY = (c1 * a2 - c2 * a1) / denominator;
+	return [intersectX, intersectY];
+}
+
+function constrainToLineSegment(pointX, pointY, x1, y1, x2, y2) {
+	const candidateX = [pointX, x1, x2];
+	const candidateY = [pointY, y1, y2];
+	let candidate = 0;
+	if (x1 < x2) {
+		if (pointX > x2) {
+			candidate = 2;
+		} else if (pointX < x1) {
+			candidate = 1;
+		}
+	} else if (x2 < x1) {
+		if (pointX > x1) {
+			candidate = 1;
+		} else if (pointX < x2) {
+			candidate = 2;
+		}
+	} else {
+		if (y1 < y2) {
+			if (pointY > y2) {
+				candidate = 2;
+			} else if (pointY < y1) {
+				candidate = 1;
+			}
+		} else if (y2 < y1) {
+			if (pointY > y1) {
+				candidate = 1;
+			} else if (pointY < y2) {
+				candidate = 2;
+			}
+		}
+	}
+	return [candidateX[candidate], candidateY[candidate]];
 }
 
 function sortVertical(pointsX, pointsY, startIndex, endIndex) {
@@ -878,7 +920,7 @@ class EdgeParallelGradientMorph {
 		const edgeY1 = pointsY[vertex1];
 		const edgeX2 = pointsX[vertex2];
 		const edgeY2 = pointsY[vertex2];
-		const [edgeDeltaX, a1, b1, c1, a2, b2] = projectOntoLine(edgeX1, edgeY1, edgeX2, edgeY2);
+		const [edgeDeltaX, a1, b1, c1, a2, b2] = projectionOntoLine(edgeX1, edgeY1, edgeX2, edgeY2);
 
 		// Min and max x values and associated y values or min and max y and associated
 		// constant x value.
@@ -895,10 +937,8 @@ class EdgeParallelGradientMorph {
 			const targetVertex = (vertex2 + i) % numPoints;
 			const targetX = pointsX[targetVertex];
 			const targetY = pointsY[targetVertex];
-			const c2 = -a2 * targetX - b2 * targetY;
-			const denominator = a1 * b2 - a2 * b1;
-			const intersectX = (b1 * c2 - b2 * c1) / denominator;
-			const intersectY = (c1 * a2 - c2 * a1) / denominator;
+			const [intersectX, intersectY] = projectOntoLine(targetX, targetY, a1, b1, c1, a2, b2);
+
 			if (edgeDeltaX !== 0) {
 				if (intersectX < minX) {
 					[minX, minY] = [intersectX, intersectY];
@@ -912,6 +952,7 @@ class EdgeParallelGradientMorph {
 					maxY = intersectY;
 				}
 			}
+
 		}
 
 		let gradient;
@@ -952,53 +993,16 @@ class EdgePerpendicularGradientMorph {
 		const edgeY1 = pointsY[vertex1];
 		const edgeX2 = pointsX[vertex2];
 		const edgeY2 = pointsY[vertex2];
-		const [edgeDeltaX, a1, b1, c1, a2, b2] = projectOntoLine(edgeX1, edgeY1, edgeX2, edgeY2);
+		const [edgeDeltaX, a1, b1, c1, a2, b2] = projectionOntoLine(edgeX1, edgeY1, edgeX2, edgeY2);
 
 		let maxDistanceSq = 0;
 		let targetVertex = 0;
-		const candidateX = [0, edgeX1, edgeX2];
-		const candidateY = [0, edgeY1, edgeY2];
 		for (let i = 0; i < numPoints; i++) {
 			const targetX = pointsX[i];
 			const targetY = pointsY[i];
-			const c2 = -a2 * targetX - b2 * targetY;
-			const denominator = a1 * b2 - a2 * b1;
-			const intersectX = (b1 * c2 - b2 * c1) / denominator;
-			const intersectY = (c1 * a2 - c2 * a1) / denominator;
-			candidateX[0] = intersectX;
-			candidateY[0] = intersectY;
-			let candidate = 0;
+			const [intersectX, intersectY] = projectOntoLine(targetX, targetY, a1, b1, c1, a2, b2);
+			const [measureX, measureY] = constrainToLineSegment(intersectX, intersectY, edgeX1, edgeY1, edgeX2, edgeY2);
 
-			if (edgeX1 < edgeX2) {
-				if (intersectX > edgeX2) {
-					candidate = 2;
-				} else if (intersectX < edgeX1) {
-					candidate = 1;
-				}
-			} else if (edgeX2 < edgeX1) {
-				if (intersectX > edgeX1) {
-					candidate = 1;
-				} else if (intersectX < edgeX2) {
-					candidate = 2;
-				}
-			} else {
-				if (edgeY1 < edgeY2) {
-					if (intersectY > edgeY2) {
-						candidate = 2;
-					} else if (intersectY < edgeY1) {
-						candidate = 1;
-					}
-				} else if (edgeY2 < edgeY1) {
-					if (intersectY > edgeY1) {
-						candidate = 1;
-					} else if (intersectY < edgeY2) {
-						candidate = 2;
-					}
-				}
-			}
-
-			const measureX = candidateX[candidate];
-			const measureY = candidateY[candidate];
 			const gradientDeltaX = targetX - measureX;
 			const gradientDeltaY = targetY - measureY;
 			const distanceSq = gradientDeltaX * gradientDeltaX + gradientDeltaY * gradientDeltaY;
@@ -1034,7 +1038,7 @@ class EdgePerpendicularGradientMorph {
 		const edgeY1 = pointsY[vertex1];
 		const edgeX2 = pointsX[vertex2];
 		const edgeY2 = pointsY[vertex2];
-		const [edgeDeltaX, a1, b1, c1, a2, b2] = projectOntoLine(edgeX1, edgeY1, edgeX2, edgeY2);
+		const [edgeDeltaX, a1, b1, c1, a2, b2] = projectionOntoLine(edgeX1, edgeY1, edgeX2, edgeY2);
 
 		const x2 = pointsX[this.targetVertex];
 		const y2 = pointsY[this.targetVertex];
