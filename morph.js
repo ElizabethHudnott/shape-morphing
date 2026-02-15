@@ -1,5 +1,5 @@
 const DEFAULT_MAX_ROTATION = Math.PI / 2;
-const DEBUG = false;
+const DEBUG = true;
 
 const numericAscending = (a, b) => a - b;
 const numericDescending = (a, b) => b - a;
@@ -310,10 +310,11 @@ class Shape {
 	resetTransform() {
 		const deltaX = this.deltaX;
 		const deltaY = this.deltaY;
-		this.resizedX = deltaX;
-		this.resizedY = deltaY;
-		this.rotatedX = deltaX;
-		this.rotatedY = deltaY;
+		this.resizedX = deltaX.slice();
+		this.resizedY = deltaY.slice();
+		this.scaleFactor = 1;
+		this.rotatedX = deltaX.slice();
+		this.rotatedY = deltaY.slice();
 		this.rotation = 0;
 		// The offsets that remain after translation, resizing and rotating.
 		this.offsetsX = undefined;
@@ -333,25 +334,36 @@ class Shape {
 			this.resizedX[i] = radius * Math.cos(angle);
 			this.resizedY[i] = radius * Math.sin(angle);
 		}
+		this.scaleFactor = scale;
 	}
 
 	/**Adds a new vertex without recalculating the centre point or average radius.
 	 * @param {number} index The index of the vertex which should end up immediately preceding
 	 * the new vertex.
 	 */
-	addVertex(index, x, y) {
-		this.pointsX.splice(index, 0, x);
-		this.pointsY.splice(index, 0, y);
-		const dx = x - this.centreX;
-		const dy = y - this.centreY;
-		this.deltaX.splice(index, 0, dx);
-		this.deltaY.splice(index, 0, dy);
-		const radius = Math.hypot(dx, dy);
-		const angle = Math.atan2(dy, dx);
-		this.radii.splice(index, 0, radius);
+	addVertex(index, resizedX, resizedY, targetX, targetY) {
+		const angle = Math.atan2(resizedY, resizedX);
 		this.angles.splice(index, 0, angle);
-		this.resizedX.splice(index, 0, radius * Math.cos(angle));
-		this.resizedY.splice(index, 0, radius * Math.sin(angle));
+		const radius = (resizedX / this.scaleFactor) / Math.cos(angle);
+		this.radii.splice(index, 0, radius);
+		const deltaX = resizedX / this.scaleFactor;
+		const deltaY = resizedY / this.scaleFactor;
+		this.deltaX.splice(index, 0, deltaX);
+		this.deltaY.splice(index, 0, deltaY);
+		this.pointsX.splice(index, 0, deltaX + this.centreX);
+		this.pointsY.splice(index, 0, deltaY + this.centreY);
+
+		this.resizedX.splice(index, 0, resizedX);
+		this.resizedY.splice(index, 0, resizedY);
+		const cos = Math.cos(this.rotation);
+		const sin = Math.sin(this.rotation);
+		const rotatedX = resizedX * cos - resizedY * sin;
+		const rotatedY = resizedX * sin + resizedY * cos;
+		this.rotatedX.splice(index, 0, rotatedX);
+		this.rotatedY.splice(index, 0, rotatedY);
+		this.offsetsX.splice(index, 0, rotatedX - targetX);
+		this.offsetsY.splice(index, 0, rotatedY - targetY);
+		this.numPoints++;
 	}
 
 	/**Computes a new set of points by rotating the scaled shape to align with the target shape
@@ -451,23 +463,39 @@ class Shape {
 			offsetsX[sourceIndex] = selectedRotatedX[sourceIndex] - shape2.resizedX[targetIndex];
 			offsetsY[sourceIndex] = selectedRotatedY[sourceIndex] - shape2.resizedY[targetIndex];
 		}
-		if (numPoints < numPoints2) {
-			let lastTarget = minErrorChoice2[minErrorAlignmentIndex];
-			for (let i = 1; i < minNumPoints; i++) {
-				const nextTarget = minErrorChoice2[(minErrorAlignmentIndex + i) % minNumPoints];
-				let numIntermediate = nextTarget - lastTarget;
-				if (numIntermediate < 0) {
-					numIntermediate += minNumPoints;
-				}
-				for (let j = 1; j <= numIntermediate; j++) {
-					const target = (lastTarget + j) % minNumPoints;
-					console.log(target);
-				}
-				lastTarget = nextTarget;
-			}
-		}
 		this.offsetsX = offsetsX;
 		this.offsetsY = offsetsY;
+
+		if (numPoints < numPoints2) {
+			let lastTarget = minErrorChoice2[minErrorAlignmentIndex];
+			let edgeX1 = this.resizedX[0];
+			let edgeY1 = this.resizedY[0];
+			let numInserted = 0;
+			for (let i = 1; i <= minNumPoints; i++) {
+				const source2 = (i + numInserted) % (numPoints + numInserted);
+				const edgeX2 = this.resizedX[source2];
+				const edgeY2 = this.resizedY[source2];
+				const [edgeDeltaX, a1, b1, c1, a2, b2] = projectionOntoLine(edgeX1, edgeY1, edgeX2, edgeY2);
+				const nextTarget = minErrorChoice2[(minErrorAlignmentIndex + i) % minNumPoints];
+				let numIntermediate = nextTarget - lastTarget - 1;
+				if (numIntermediate < 0) {
+					numIntermediate += numPoints2;
+				}
+				for (let j = 1; j <= numIntermediate; j++) {
+					const target = (lastTarget + j) % numPoints2;
+					const targetX = shape2.resizedX[target];
+					const targetY = shape2.resizedY[target];
+					let [projectX, projectY] = projectOntoLine(targetX, targetY, a1, b1, c1, a2, b2);
+					[projectX, projectY] = constrainToLineSegment(projectX, projectY, edgeX1, edgeY1, edgeX2, edgeY2);
+					this.addVertex(source2, projectX, projectY, targetX, targetY);
+					numInserted++;
+				}
+				lastTarget = nextTarget;
+				edgeX1 = edgeX2;
+				edgeY1 = edgeY2;
+			}
+		}
+
 	}
 
 }
