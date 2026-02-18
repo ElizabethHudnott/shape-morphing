@@ -1860,8 +1860,8 @@ if (!Number.isFinite(endBlur)) {
 	endBlur = startBlur;
 }
 
-const numVertices = parseInt(parameters.get('vertices')) || 5;
-const numVertices2 = parseInt(parameters.get('vertices2')) || numVertices;
+const numVertices = parseInt(parameters.get('vertices')) || 3 + Math.trunc(Math.random() * 6);
+const numVertices2 = parseInt(parameters.get('vertices2')) || 3 + Math.trunc(Math.random() * 6);
 //let polygon1 = randomPolygon(numVertices);
 //let polygon2 = randomPolygon(numVertices2);
 let [polygon1, polygon2] = layoutPolygons(cyclicPolygonPoints, numVertices, numVertices2);
