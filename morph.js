@@ -1210,10 +1210,10 @@ class StrokeMorph {
 		this.endEase = Ease.LINEAR;
 	}
 
-	interpolate(morph, interpolation) {
+	interpolate(morph, interpolation, context) {
 		let t;
 		if (this.colourMorph) {
-			this.colour = this.colourMorph.interpolate(this, interpolation);
+			this.colour = this.colourMorph.interpolate(morph, interpolation, context);
 		} else {
 			this.colour = undefined;
 		}
@@ -1471,7 +1471,7 @@ class Morph {
 			this.fillStyle = this.fillMorph.interpolate(this, interpolation, context);
 		}
 		if (this.strokeMorph) {
-			this.strokeMorph.interpolate(this, interpolation);
+			this.strokeMorph.interpolate(this, interpolation, context);
 		}
 		if (this.shadowMorph) {
 			this.shadowMorph.interpolate(this, interpolation, lightSourceX, lightSourceY);
@@ -1817,6 +1817,7 @@ const canvas = document.getElementById('canvas');
 const context = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
+context.lineJoin = 'round';
 
 const Mode = Object.freeze({
 	ANIMATE: 0,
@@ -1872,7 +1873,7 @@ if (mode === Mode.OVERLAY && polygon2.size > polygon1.size) {
 const fillStr2 = parameters.get('fill2');
 if (fillStr2) {
 	const toColour = new ColourMorph(fillStr2);
-	gradientType = parseInt(parameters.get('gradient'));
+	const gradientType = parseInt(parameters.get('gradient'));
 	/* 1 Edge to vertex
 	 * 2 Along an edge
 	 * 3 Vertex to vertex
@@ -1955,6 +1956,20 @@ if (hasEndLineWidth && !hasStartLineWidth) {
 }
 if (hasStrokeColour) {
 	strokeColourMorph = new ColourMorph(parameters.get('stroke'));
+	if (parameters.has('stroke2')) {
+		toColour = new ColourMorph(parameters.get('stroke2'));
+		const gradientType = parseInt(parameters.get('stroke_gradient'));
+		switch (gradientType) {
+		case 2:
+			strokeColourMorph = new EdgeParallelGradientMorph(0, [strokeColourMorph, toColour]);
+			break;
+		default:
+			strokeColourMorph = new CentreConicGradientMorph(
+				[strokeColourMorph, toColour, strokeColourMorph],
+				[0, 0.5, 1]
+			);
+		}
+	}
 }
 if (
 	(!hasStartLineWidth && !hasEndLineWidth) &&

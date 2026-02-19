@@ -16,6 +16,8 @@ blend | The [compositing mode](https://developer.mozilla.org/en-US/docs/Web/API/
 fill2 | A second fill colour. When two fill colours are specified the shape is filled with a colour gradient.
 gradient | The method used to calculate the colour gradient. See the table below for permissible values.
 stroke | The colour used to draw the shape's outline.
+stroke2 | Used to apply a colour gradient to the shape's outline.
+stroke_gradient | The method used to calculate the colour gradient for the shape's outline. 2 and 5 are the only algorithms supported.
 line_width | The width of the stroke used to paint the shape's outline.
 line_width2 | The width of the stroke in the last frame of the animation if it's different from at the start of the animation. If the shape grows or shrinks during the animation then the line width will vary automatically in a way which is proportional to the change to the shape's overall size and it's not necessary to explicitly specify a second line width for this purpose.
 dash | A comma separated list of numbers which specify a pattern of dashes and gaps used when drawing the outline.
@@ -57,7 +59,6 @@ Type | Description
 * Automatic conversion of text to shapes.
 * Radial gradients.
 * Images used as fill patterns.
-* Gradients applied to shape outline strokes.
 * Animation by altering the positions of colours within a gradient rather than changing the colours themselves.
 * More alternate rendering modes. For example, a storyboard view containing multiple static images, or a movement path trace for each vertex.
 * More easing functions.
