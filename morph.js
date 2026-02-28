@@ -1,5 +1,4 @@
 const DEFAULT_MAX_ROTATION = Math.PI / 2;
-const DEBUG = true;
 
 const numericAscending = (a, b) => a - b;
 const numericDescending = (a, b) => b - a;
@@ -294,7 +293,6 @@ class Shape {
 		}
 		area *= 0.5;
 
-		this.numPoints = numPoints;
 		this.pointsX = pointsX;
 		this.pointsY = pointsY;
 		this.centreX = centreX;
@@ -307,6 +305,10 @@ class Shape {
 		this.offsetsX = new Array(numPoints);
 		this.offsetsY = new Array(numPoints);
 		this.resetTransform();
+	}
+
+	get numPoints() {
+		return this.pointsX.length;
 	}
 
 	resetTransform() {
@@ -343,7 +345,19 @@ class Shape {
 	 * @param {number} index The index of the vertex which should end up immediately preceding
 	 * the new vertex.
 	 */
-	addVertex(index, resizedX, resizedY, targetX, targetY) {
+	addVertex(index, rotatedX, rotatedY) {
+		this.rotatedX.splice(index, 0, rotatedX);
+		this.rotatedY.splice(index, 0, rotatedY);
+		this.offsetsX.splice(index, 0, 0);
+		this.offsetsY.splice(index, 0, 0);
+
+		const cos = Math.cos(-this.rotation);
+		const sin = Math.sin(-this.rotation);
+		const resizedX = rotatedX * cos - rotatedY * sin;
+		const resizedY = rotatedX * sin + rotatedY * cos;
+		this.resizedX.splice(index, 0, resizedX);
+		this.resizedY.splice(index, 0, resizedY);
+
 		const angle = Math.atan2(resizedY, resizedX);
 		this.angles.splice(index, 0, angle);
 		const radius = (resizedX / this.scaleFactor) / Math.cos(angle);
@@ -355,17 +369,6 @@ class Shape {
 		this.pointsX.splice(index, 0, deltaX + this.centreX);
 		this.pointsY.splice(index, 0, deltaY + this.centreY);
 
-		this.resizedX.splice(index, 0, resizedX);
-		this.resizedY.splice(index, 0, resizedY);
-		const cos = Math.cos(this.rotation);
-		const sin = Math.sin(this.rotation);
-		const rotatedX = resizedX * cos - resizedY * sin;
-		const rotatedY = resizedX * sin + resizedY * cos;
-		this.rotatedX.splice(index, 0, rotatedX);
-		this.rotatedY.splice(index, 0, rotatedY);
-		this.offsetsX.splice(index, 0, rotatedX - targetX);
-		this.offsetsY.splice(index, 0, rotatedY - targetY);
-		this.numPoints++;
 	}
 
 	/**Computes a new set of points by rotating the scaled shape to align with the target shape
@@ -416,7 +419,7 @@ class Shape {
 					}
 					const rotatedX = new Array(numPoints);
 					const rotatedY = new Array(numPoints);
-					const distancesSquared = new Array(numPoints);
+					const distancesSquared = new Array(minNumPoints);
 					for (let j = 0; j < minNumPoints; j++) {
 						const sourceIndex = choice[j];
 						const x = this.resizedX[sourceIndex];
@@ -433,9 +436,9 @@ class Shape {
 						rotatedY[j] = transformedY;
 					}
 					distancesSquared.sort(numericAscending);
-					const midIndex = numPoints >> 1;
+					const midIndex = minNumPoints >> 1;
 					let medianDistance;
-					if (numPoints & 1) {
+					if (minNumPoints & 1) {
 						medianDistance = distancesSquared[midIndex];
 					} else {
 						medianDistance = 0.5 * (distancesSquared[midIndex] + distancesSquared[midIndex - 1]);
@@ -451,16 +454,31 @@ class Shape {
 			}		// end for each choice of vertices in Shape 1
 		}			// end for each vertex of Shape 2 to align to
 		this.rotation = selectedRotation;
+		this.rotatedX = new Array(numPoints);
+		this.rotatedY = new Array(numPoints);
+		const cos = Math.cos(selectedRotation);
+		const sin = Math.sin(selectedRotation);
+		for (let i = 0; i < numPoints; i++) {
+			this.rotatedX[i] = this.resizedX[i] * cos - this.resizedY[i] * sin;
+			this.rotatedY[i] = this.resizedX[i] * sin + this.resizedY[i] * cos;
+		}
+		for (let i = 0; i < minNumPoints; i++) {
+			const source = minErrorChoice[i];
+			const target = minErrorChoice2[(minErrorAlignmentIndex + i) % minNumPoints];
+			this.offsetsX[source] = this.rotatedX[source] - shape2.resizedX[target];
+			this.offsetsY[source] = this.rotatedY[source] - shape2.resizedY[target];
+		}
 
 		let numInserted = 0;
 		if (numPoints < numPoints2) {
+			console.log('Add vertices to shape 1.');
 			let lastTarget = minErrorChoice2[minErrorAlignmentIndex];
-			let edgeX1 = this.resizedX[0];
-			let edgeY1 = this.resizedY[0];
+			let edgeX1 = this.rotatedX[0];
+			let edgeY1 = this.rotatedY[0];
 			for (let i = 1; i <= minNumPoints; i++) {
 				let source2 = (i + numInserted) % (numPoints + numInserted);
-				const edgeX2 = this.resizedX[source2];
-				const edgeY2 = this.resizedY[source2];
+				const edgeX2 = this.rotatedX[source2];
+				const edgeY2 = this.rotatedY[source2];
 				const [edgeDeltaX, a1, b1, c1, a2, b2] = projectionOntoLine(edgeX1, edgeY1, edgeX2, edgeY2);
 				const nextTarget = minErrorChoice2[(minErrorAlignmentIndex + i) % minNumPoints];
 				let numIntermediate = nextTarget - lastTarget - 1;
@@ -471,9 +489,14 @@ class Shape {
 					const target = (lastTarget + j) % numPoints2;
 					const targetX = shape2.resizedX[target];
 					const targetY = shape2.resizedY[target];
-					let [projectX, projectY] = projectOntoLine(targetX, targetY, a1, b1, c1, a2, b2);
-					[projectX, projectY] = constrainToLineSegment(projectX, projectY, edgeX1, edgeY1, edgeX2, edgeY2);
-					this.addVertex(source2, projectX, projectY, targetX, targetY);
+					let projectX = edgeX1, projectY = edgeY1;
+					if (edgeDeltaX !== 0 || edgeY2 !== edgeY1) {
+						[projectX, projectY] = projectOntoLine(targetX, targetY, a1, b1, c1, a2, b2);
+						[projectX, projectY] = constrainToLineSegment(projectX, projectY, edgeX1, edgeY1, edgeX2, edgeY2);
+					}
+					this.addVertex(source2, projectX, projectY);
+					this.offsetsX[source2] = projectX - targetX;
+					this.offsetsY[source2] = projectY - targetY;
 					source2++;
 					numInserted++;
 				}
@@ -484,6 +507,7 @@ class Shape {
 
 		} else if (numPoints > numPoints2) {
 
+			console.log('Add vertices to shape 2.');
 			let lastSource = minErrorChoice[0];
 			let edgeX1 = shape2.resizedX[minErrorAlignmentIndex];
 			let edgeY1 = shape2.resizedY[minErrorAlignmentIndex];
@@ -500,11 +524,17 @@ class Shape {
 				}
 				for (let j = 1; j <= numIntermediate; j++) {
 					const source = (lastSource + j) % numPoints;
-					const sourceX = this.resizedX[source];
-					const sourceY = this.resizedY[source];
-					let [projectX, projectY] = projectOntoLine(sourceX, sourceY, a1, b1, c1, a2, b2);
-					[projectX, projectY] = constrainToLineSegment(projectX, projectY, edgeX1, edgeY1, edgeX2, edgeY2);
-					shape2.addVertex(target2, projectX, projectY, sourceX, sourceY);
+					const sourceX = this.rotatedX[source];
+					const sourceY = this.rotatedY[source];
+
+					let projectX = edgeX1, projectY = edgeY1;
+					if (edgeDeltaX !== 0 || edgeY2 !== edgeY1) {
+						[projectX, projectY] = projectOntoLine(sourceX, sourceY, a1, b1, c1, a2, b2);
+						[projectX, projectY] = constrainToLineSegment(projectX, projectY, edgeX1, edgeY1, edgeX2, edgeY2);
+					}
+					shape2.addVertex(target2, projectX, projectY);
+					this.offsetsX[source] = sourceX - projectX;
+					this.offsetsY[source] = sourceY - projectY;
 					target2++;
 					numInserted++;
 				}
@@ -515,19 +545,6 @@ class Shape {
 
 		}
 
-		this.rotatedX = new Array(maxNumPoints);
-		this.rotatedY = new Array(maxNumPoints);
-		const cos = Math.cos(selectedRotation);
-		const sin = Math.sin(selectedRotation);
-		for (let i = 0; i < maxNumPoints; i++) {
-			const targetIndex = (minErrorAlignmentIndex + i) % maxNumPoints;
-			const rotatedX = this.resizedX[i] * cos - this.resizedY[i] * sin;
-			const rotatedY = this.resizedX[i] * sin + this.resizedY[i] * cos;
-			this.rotatedX[i] = rotatedX;
-			this.rotatedY[i] = rotatedY;
-			this.offsetsX[i] = rotatedX - shape2.resizedX[targetIndex];
-			this.offsetsY[i] = rotatedY - shape2.resizedY[targetIndex];
-		}
 	}
 
 }
@@ -1812,6 +1829,47 @@ function drawFaded(context, morph, interpolation) {
 	drawInterpolatedShape(context, morph, interpolation);
 }
 
+function drawVertexMap() {
+	const numPoints = polygon1.numPoints;
+	context.clearRect(0, 0, canvas.width, canvas.height);
+	context.save();
+	context.translate(0.5 * canvas.width,  0.5 * canvas.height);
+
+	context.beginPath();
+	context.moveTo(polygon1.deltaX[0], polygon1.deltaY[0]);
+	for (let i = 1; i < numPoints; i++) {
+		context.lineTo(polygon1.deltaX[i], polygon1.deltaY[i]);
+	}
+	context.closePath();
+	context.fillStyle = 'rgba(255, 0, 0, 70%)';
+	context.fill();
+
+	context.beginPath();
+	context.moveTo(polygon2.rotatedX[0], polygon2.rotatedY[0]);
+	for (let i = 1; i < numPoints; i++) {
+		context.lineTo(polygon2.rotatedX[i], polygon2.rotatedY[i]);
+	}
+	context.closePath();
+	context.fillStyle = 'rgba(0, 255, 0, 70%)';
+	context.fill();
+
+	for (let i = 0; i < numPoints; i++) {
+		const x2 = polygon2.rotatedX[i];
+		const y2 = polygon2.rotatedY[i]
+		const x1 = x2 - polygon2.offsetsX[i];
+		const y1 = y2 - polygon2.offsetsY[i];
+		context.beginPath();
+		context.moveTo(x1, y1);
+		context.lineTo(x2, y2);
+		const gradient = context.createLinearGradient(x1, y1, x2, y2);
+		gradient.addColorStop(0, 'black');
+		gradient.addColorStop(1, 'blue');
+		context.strokeStyle = gradient;
+		context.stroke();
+	}
+	context.restore();
+}
+
 
 const canvas = document.getElementById('canvas');
 const context = canvas.getContext('2d');
@@ -2048,4 +2106,5 @@ case Mode.ANIMATE:
 case Mode.OVERLAY:
 	// Draw with successive frames overlaid on top of each other.
 	morph.overlay(context, drawFaded, sunX, sunY);
+	break;
 }

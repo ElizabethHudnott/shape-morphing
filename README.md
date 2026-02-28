@@ -53,7 +53,7 @@ Type | Description
 * Shapes with curved parts.
 * Shapes with holes, e.g. an annulus (doughnut).
 * Shapes with self intersecting edges. E.g. a pentagram.
-* Multiple source and destination shapes which would be automatically paired up to minimize the total amount of movement.
+* Multiple source and destination shapes which would be automatically paired up to minimize the total amount of movement. If there aren't equal numbers of source and destination shapes then some shapes would need to broken into pieces.
 * No explicit support/assistance yet with chaining multiple successive animations together.
 * A shear transformation isn't currently considered as a possible cause for a shape change. Presently, translations, rotations and scaling of the source shape are analyzed as being possible mappings between the source shape and the destination shape with any residual differences being interpreted as translations of individual vertices.
 * Automatic conversion of text to shapes.
