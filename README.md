@@ -50,15 +50,16 @@ Type | Description
 * The dashes move around even when I don't intend them to as the shape's perimeter changes.
 
 ## Things Not Supported (Yet)
-* Shapes with curved parts.
+* Shapes containing Bezier curves.
+* Entirely curved objects: circle and ellipse segments, curves defined by functions.
 * Shapes with holes, e.g. an annulus (doughnut).
 * Shapes with self intersecting edges. E.g. a pentagram.
-* Multiple source and destination shapes which would be automatically paired up to minimize the total amount of movement. If there aren't equal numbers of source and destination shapes then some shapes would need to broken into pieces.
+* Multiple source and destination shapes which would be automatically paired up to minimize the total amount of movement. If there aren't equal numbers of source and destination shapes then some shapes would need to be broken into pieces.
 * No explicit support/assistance yet with chaining multiple successive animations together.
 * A shear transformation isn't currently considered as a possible cause for a shape change. Presently, translations, rotations and scaling of the source shape are analyzed as being possible mappings between the source shape and the destination shape with any residual differences being interpreted as translations of individual vertices.
 * Automatic conversion of text to shapes.
 * Radial gradients.
-* Images used as fill patterns.
+* Tiling patterns used to fill the shapes.
 * Animation by altering the positions of colours within a gradient rather than changing the colours themselves.
 * More alternate rendering modes. For example, a storyboard view containing multiple static images, or a movement path trace for each vertex.
 * More easing functions.

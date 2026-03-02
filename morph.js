@@ -471,7 +471,6 @@ class Shape {
 
 		let numInserted = 0;
 		if (numPoints < numPoints2) {
-			console.log('Add vertices to shape 1.');
 			let lastTarget = minErrorChoice2[minErrorAlignmentIndex];
 			let edgeX1 = this.rotatedX[0];
 			let edgeY1 = this.rotatedY[0];
@@ -489,11 +488,8 @@ class Shape {
 					const target = (lastTarget + j) % numPoints2;
 					const targetX = shape2.resizedX[target];
 					const targetY = shape2.resizedY[target];
-					let projectX = edgeX1, projectY = edgeY1;
-					if (edgeDeltaX !== 0 || edgeY2 !== edgeY1) {
-						[projectX, projectY] = projectOntoLine(targetX, targetY, a1, b1, c1, a2, b2);
-						[projectX, projectY] = constrainToLineSegment(projectX, projectY, edgeX1, edgeY1, edgeX2, edgeY2);
-					}
+					let [projectX, projectY] = projectOntoLine(targetX, targetY, a1, b1, c1, a2, b2);
+					[projectX, projectY] = constrainToLineSegment(projectX, projectY, edgeX1, edgeY1, edgeX2, edgeY2);
 					this.addVertex(source2, projectX, projectY);
 					this.offsetsX[source2] = projectX - targetX;
 					this.offsetsY[source2] = projectY - targetY;
@@ -507,7 +503,6 @@ class Shape {
 
 		} else if (numPoints > numPoints2) {
 
-			console.log('Add vertices to shape 2.');
 			let lastSource = minErrorChoice[0];
 			let edgeX1 = shape2.resizedX[minErrorAlignmentIndex];
 			let edgeY1 = shape2.resizedY[minErrorAlignmentIndex];
@@ -516,6 +511,7 @@ class Shape {
 					(numPoints2 + numInserted);
 				const edgeX2 = shape2.resizedX[target2];
 				const edgeY2 = shape2.resizedY[target2];
+if (edgeX2 === edgeX1 && edgeY2 === edgeY1) debugger;
 				const [edgeDeltaX, a1, b1, c1, a2, b2] = projectionOntoLine(edgeX1, edgeY1, edgeX2, edgeY2);
 				const nextSource = minErrorChoice[i % minNumPoints];
 				let numIntermediate = nextSource - lastSource - 1;
@@ -526,15 +522,14 @@ class Shape {
 					const source = (lastSource + j) % numPoints;
 					const sourceX = this.rotatedX[source];
 					const sourceY = this.rotatedY[source];
-
-					let projectX = edgeX1, projectY = edgeY1;
-					if (edgeDeltaX !== 0 || edgeY2 !== edgeY1) {
-						[projectX, projectY] = projectOntoLine(sourceX, sourceY, a1, b1, c1, a2, b2);
-						[projectX, projectY] = constrainToLineSegment(projectX, projectY, edgeX1, edgeY1, edgeX2, edgeY2);
-					}
+					let [projectX, projectY] = projectOntoLine(sourceX, sourceY, a1, b1, c1, a2, b2);
+					[projectX, projectY] = constrainToLineSegment(projectX, projectY, edgeX1, edgeY1, edgeX2, edgeY2);
 					shape2.addVertex(target2, projectX, projectY);
 					this.offsetsX[source] = sourceX - projectX;
 					this.offsetsY[source] = sourceY - projectY;
+					if (target2 <= minErrorAlignmentIndex) {
+						minErrorAlignmentIndex++;
+					}
 					target2++;
 					numInserted++;
 				}
@@ -1370,7 +1365,7 @@ class ShadowMorph {
 		const t = this.lengthEase(interpolation);
 		let length = this.startLength * (1 - t) + this.endLength * t;
 		length += (morph.strokeMorph?.width || 0) * 0.5;
-		const numPoints = morph.polygon2.numPoints;
+		const numPoints = morph.numPoints;
 		const translateX = morph.translateX, translateY = morph.translateY;
 		let sumOffsetX = 0, sumOffsetY = 0;
 		for (let i = 0; i < numPoints; i++) {
@@ -1433,6 +1428,10 @@ class Morph {
 		this.endBlur = endBlur;
 		this.blurEase = Ease.LINEAR;
 		this.blur = startBlur;
+	}
+
+	get numPoints() {
+		return this.polygon2.numPoints;
 	}
 
 	setSpeed(speed) {
@@ -1569,14 +1568,8 @@ class Morph {
 	}
 
 	overlay(context, callback, lightSourceX = 0, lightSourceY = 0) {
-		this.interpolate(0, context);
-		context.save();
-		this.transform(context);
-		callback(context, this, 0);
-		context.restore();
-
 		for (
-			let interpolation = this.interpolationStep;
+			let interpolation = 0;
 			interpolation <= 1;
 			interpolation += this.interpolationStep
 		) {
@@ -1592,158 +1585,179 @@ class Morph {
 
 class Path2D {
 
-	static generate(pathGenerator, startT = 0, endT = 1) {
-		let [startX, startY] = pathGenerator(startT);
-		startX = Math.round(startX);
-		startY = Math.round(startY);
+	static generate(
+		pathGenerator, startT = 0, endT = 1, parameter = 0, roundX = 1, roundY = roundX
+	) {
+		let [startX, startY] = pathGenerator(startT, parameter);
+		startX = Math.round(startX / roundX) * roundX;
+		startY = Math.round(startY / roundY) * roundY;
 
-		let [endX, endY] = pathGenerator(endT);
-		endX = Math.round(endX);
-		endY = Math.round(endY);
-		let path;
+		let [endX, endY] = pathGenerator(endT, parameter);
+		endX = Math.round(endX / roundX) * roundX;
+		endY = Math.round(endY / roundY) * roundY;
+
 		if (startX !== endX || startY !== endY) {
-			// open curve
-			path = Path2D.#interpolateSegment(
-				pathGenerator, startX, startY, startT, endX, endY, endT
+			// Open curve
+			const path = Path2D.#interpolateSegment(
+				pathGenerator, parameter, startX, startY, startT, endX, endY, endT
 			);
-			path.prependPoint(startX, startY, startT);
-			path.appendPoint(endX, endY, endT);
-		} else {
-			// closed curve
-			let lowMidT = endT;
-			let highMidT = startT;
-			let lowMidX, lowMidY, highMidX, highMidY;
-			do {
-				lowMidT = 0.5 * (startT + lowMidT);
-				highMidT = 0.5 * (highMidT + endT);
-
-				[lowMidX, lowMidY] = pathGenerator(lowMidT);
-				lowMidX = Math.round(lowMidX);
-				lowMidY = Math.round(lowMidY);
-
-				[highMidX, highMidY] = pathGenerator(highMidT);
-				highMidX = Math.round(highMidX);
-				highMidY = Math.round(highMidY);
-			} while (lowMidX === startX && lowMidY === startY && highMidX === endX && highMidY === endY);
-			path = Path2D.#interpolateSegment(
-				pathGenerator, startX, startY, startT, lowMidX, lowMidY, lowMidT
-			);
-			path.prependPoint(startX, startY, startT);
-			path.appendPoint(lowMidX, lowMidY, lowMidT);
-			let path2;
-			if (lowMidT !== highMidT) {
-				path2 = Path2D.#interpolateSegment(
-					pathGenerator, lowMidX, lowMidY, lowMidT, highMidX, highMidY, highMidT
-				);
-				path.appendPath(path2);
-				path.appendPoint(highMidX, highMidY, highMidT);
-			}
-			path2 = Path2D.#interpolateSegment(
-				pathGenerator, highMidX, highMidY, highMidT, endX, endY, endT
-			);
-			path.appendPath(path2);
-			path.appendPoint(endX, endY, endT);
+			path.#prependPoint(startX, startY, startT);
+			path.#appendPoint(endX, endY, endT);
+			return path;
 		}
+
+		// Closed curve
+		let lowMidT = 0.5 * (startT + endT);
+		let highMidT = lowMidT;
+
+		let [lowMidX, lowMidY] = pathGenerator(lowMidT, parameter);
+		lowMidX = Math.round(lowMidX / roundX) * roundX;
+		lowMidY = Math.round(lowMidY / roundY) * roundY;
+		let highMidX = lowMidX;
+		let highMidY = lowMidY;
+
+		const MAX_ITERATIONS = 6;	// Safety measure
+		let i = 0;
+		while (lowMidX === startX && lowMidY === startY && i < MAX_ITERATIONS) {
+			lowMidT = 0.5 * (startT + lowMidT);
+			[lowMidX, lowMidY] = pathGenerator(lowMidT, parameter);
+			lowMidX = Math.round(lowMidX / roundX) * roundX;
+			lowMidY = Math.round(lowMidY / roundY) * roundY;
+			i++;
+		}
+		i = 0;
+		while (highMidX === endX && highMidY === endY && i < MAX_ITERATIONS) {
+			highMidT = 0.5 * (highMidT + endT);
+			[highMidX, highMidY] = pathGenerator(highMidT, parameter);
+			highMidX = Math.round(highMidX / roundX) * roundX;
+			highMidY = Math.round(highMidY / roundY) * roundY;
+			i++;
+		}
+
+		// Range [startT, lowMidT]
+		let path = Path2D.#interpolateSegment(
+			pathGenerator, parameter, startX, startY, startT, lowMidX, lowMidY, lowMidT, roundX,
+			roundY
+		);
+		path.#prependPoint(startX, startY, startT);
+		path.#appendPoint(lowMidX, lowMidY, lowMidT);
+
+		let path2;
+
+		// Range (lowMidT, highMidT]
+		if (lowMidT !== highMidT) {
+			path2 = Path2D.#interpolateSegment(
+				pathGenerator, parameter, lowMidX, lowMidY, lowMidT, highMidX, highMidY, highMidT,
+				roundX, roundY
+			);
+			path.#appendPath(path2);
+			path.#appendPoint(highMidX, highMidY, highMidT);
+		}
+
+		// Range (highMidT, endT]
+		path2 = Path2D.#interpolateSegment(
+			pathGenerator, parameter, highMidX, highMidY, highMidT, endX, endY, endT, roundX,
+			roundY
+		);
+		path.#appendPath(path2);
+		path.#appendPoint(endX, endY, endT);
 		return path;
 	}
 
-	static #interpolateSegment(pathGenerator, startX, startY, startT, endX, endY, endT) {
+	static #interpolateSegment(
+		pathGenerator, parameter, startX, startY, startT, endX, endY, endT, roundX, roundY
+	) {
 		const xDistance = Math.abs(endX - startX);
 		const yDistance = Math.abs(endY - startY);
 
-		if (xDistance <= 1 && yDistance <= 1) {
+		if (xDistance <= roundX && yDistance <= roundY) {
 			// No intermediate points needed. The start and end points of the current segment
 			// are enough.
 			return new Path2D([], [], []);
 		}
 
 		const midT = 0.5 * (startT + endT);
-		let [midX, midY] = pathGenerator(midT);
-		midX = Math.round(midX);
-		midY = Math.round(midY);
+		let [midX, midY] = pathGenerator(midT, parameter);
+		midX = Math.round(midX / roundX) * roundX;
+		midY = Math.round(midY / roundY) * roundY;
 
 		const path = Path2D.#interpolateSegment(
-			pathGenerator, startX, startY, startT, midX, midY, midT
+			pathGenerator, parameter, startX, startY, startT, midX, midY, midT, roundX, roundY
 		);
-		path.appendPoint(midX, midY, midT);
+		path.#appendPoint(midX, midY, midT);
 		const path2 = Path2D.#interpolateSegment(
-			pathGenerator, midX, midY, midT, endX, endY, endT
+			pathGenerator, parameter, midX, midY, midT, endX, endY, endT, roundX, roundY
 		);
-		path.appendPath(path2);
+		path.#appendPath(path2);
 		return path;
 	}
 
 	constructor(xValues, yValues, tValues) {
-		this.xValues = xValues;
-		this.yValues = yValues;
-		this.tValues = tValues;
+		this.pointsX = xValues;
+		this.pointsY = yValues;
+		this.pointsT = tValues;
 	}
 
-	get length() {
-		return this.tValues.length;
+	get numPoints() {
+		return this.pointsT.length;
 	}
 
-	getPoint(searchT) {
-		const tValues = this.tValues;
-		if (searchT === tValues[0]) {
-			return [ this.xValues[0], this.yValues[0] ];
-		}
-		let upperIndex = tValues.length - 1;
-		if (searchT === tValues[upperIndex]) {
-			return [ this.xValues[upperIndex], this.yValues[upperIndex] ];
-		}
-
+	getIndex(searchT) {
 		let lowerIndex = 0;
-		let resultIndex;
+		let upperIndex = this.pointsT.length - 1;
+
 		while (true) {
 			const midIndex = (lowerIndex + upperIndex) >> 1;
-			const midValue = tValues[midIndex];
-			if (searchT === midValue) {
-				resultIndex = midIndex;
-				break;
-			} else if (searchT < midValue) {
-				if (lowerIndex = midIndex - 1) {
-					if (searchT - tValues[lowerIndex] <= midValue - searchT) {
-						resultIndex = lowerIndex;
+			const midT = this.pointsT[midIndex];
+
+			if (searchT === midT) {
+				return midIndex;
+			}
+
+			if (searchT < midT) {
+
+				if (lowerIndex === midIndex - 1) {
+					if (searchT - this.pointsT[lowerIndex] < midT - searchT) {
+						return lowerIndex;
 					} else {
-						resultIndex = midIndex;
+						return midIndex;
 					}
-					break;
 				}
 				upperIndex = midIndex - 1;
+
 			} else {
-				// searchT > midValue
-				if (upperIndex = midIndex + 1) {
-					if (searchT - midValue <= tValues[upperIndex] - searchT) {
-						resultIndex = midIndex;
+
+				// searchT > midT
+				if (upperIndex === midIndex + 1) {
+					if (searchT - midT < this.pointsT[upperIndex] - searchT) {
+						return midIndex;
 					} else {
-						resultIndex = upperIndex;
+						return upperIndex;
 					}
-					break;
 				}
 				lowerIndex = midIndex + 1;
 			}
+
 		} // end loop
-		return [ this.xValues[resultIndex], this.yValues[resultIndex] ];
 	}
 
-	prependPoint(x, y, t) {
-		this.xValues.unshift(x);
-		this.yValues.unshift(y);
-		this.tValues.unshift(t);
+	#prependPoint(x, y, t) {
+		this.pointsX.unshift(x);
+		this.pointsY.unshift(y);
+		this.pointsT.unshift(t);
 	}
 
-	appendPoint(x, y, t) {
-		this.xValues.push(x);
-		this.yValues.push(y);
-		this.tValues.push(t);
+	#appendPoint(x, y, t) {
+		this.pointsX.push(x);
+		this.pointsY.push(y);
+		this.pointsT.push(t);
 	}
 
-	appendPath(path) {
-		const numPoints = this.tValues.length;
-		this.xValues.splice(numPoints, 0, ...path.xValues);
-		this.yValues.splice(numPoints, 0, ...path.yValues);
-		this.tValues.splice(numPoints, 0, ...path.tValues);
+	#appendPath(path) {
+		const numPoints = this.pointsT.length;
+		this.pointsX.splice(numPoints, 0, ...path.pointsX);
+		this.pointsY.splice(numPoints, 0, ...path.pointsY);
+		this.pointsT.splice(numPoints, 0, ...path.pointsT);
 	}
 
 	/**Computes some statistic about the rate of change in the curve and returns that statistic.
@@ -1757,31 +1771,15 @@ class Path2D {
 	 * 0					Math.max		Value of delta t to use to animate the fastest part of the
 	 * 									curve at 1 pixel per frame.
 	 */
-	deltaTCalculation(initialValue, func) {
-		const xValues = this.xValues;
-		const yValues = this.yValues;
-		const tValues = this.tValues;
-		const numPoints = tValues.length;
-		let prevX = xValues[0];
-		let prevY = yValues[0];
-		let prevT = tValues[0];
-		let deltaTStatistic = initialValue;
-		for (let i = 1; i < numPoints; i++) {
-			const x = xValues[i];
-			const y = yValues[i];
-			const t = tValues[i];
-			const xDistance = Math.abs(x - prevX);
-			const yDistance = Math.abs(y - prevY);
-			const deltaSpace = Math.max(xDistance, yDistance);
-			if (deltaSpace > 0) {
-				const deltaT = (t - prevT) / deltaSpace;
-				deltaTStatistic = func(deltaTStatistic, deltaT);
-				prevX = x;
-				prevY = y;
-				prevT = t;
-			}
+	statistic(initialValue, func) {
+		let prevT = this.pointsT[0];
+		let statistic = initialValue;
+		for (let i = 1; i < this.numPoints; i++) {
+			const t = this.pointsT[i];
+			statistic = func(statistic, t - prevT);
+			prevT = t;
 		}
-		return deltaTStatistic;
+		return statistic;
 	}
 
 }
