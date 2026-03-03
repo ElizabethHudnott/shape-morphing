@@ -46,6 +46,7 @@ Type | Description
 5 | The gradient is a conic gradient centred on the centre of the shape. An additional parameter called `spin` can be used to animate the gradient by specifying an amount of rotation in degrees.
 
 ## Bugs
+* The movements of the additional interpolated vertices which are added when the shapes have different numbers of sides aren't included in the distance minimization calculation.
 * If the shape is concave then the movement paths of two vertices can sometimes cross one another and produce a weird looking result.
 * The dashes move around even when I don't intend them to as the shape's perimeter changes.
 

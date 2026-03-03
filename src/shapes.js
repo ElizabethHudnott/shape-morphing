@@ -1,3 +1,5 @@
+// Code for modelling shapes.
+
 import {Geometry, Sort} from './math.js';
 
 class Shape {
@@ -148,21 +150,14 @@ class Shape {
 	rotate(shape2, maxRotation) {
 		const numPoints = this.numPoints;
 		const numPoints2 = shape2.numPoints;
-		let minNumPoints, maxNumPoints;
-		if (numPoints >= numPoints2) {
-			maxNumPoints = numPoints;
-			minNumPoints = numPoints2;
-		} else {
-			maxNumPoints = numPoints2;
-			minNumPoints = numPoints;
-		}
+		const minNumPoints = Math.min(numPoints, numPoints2);
 		let minError = Infinity;
 		let minErrorChoice = new Array(minNumPoints);
 		let minErrorChoice2 = new Array(minNumPoints);
 		let minErrorAlignmentIndex = 0;
 		for (let i = 0; i < minNumPoints; i++) {
-			minErrorChoice[i] = Math.trunc(i * maxNumPoints / numPoints);
-			minErrorChoice2[i] = Math.trunc(i * maxNumPoints / numPoints2);
+			minErrorChoice[i] = Math.trunc(i * numPoints / minNumPoints);
+			minErrorChoice2[i] = Math.trunc(i * numPoints2 / minNumPoints);
 		}
 
 		let selectedRotation = 0;
@@ -186,9 +181,7 @@ class Shape {
 					if (alignmentIndex === -1) {
 						continue;
 					}
-					const rotatedX = new Array(numPoints);
-					const rotatedY = new Array(numPoints);
-					const distancesSquared = new Array(minNumPoints);
+					let sumOfSquares = 0;
 					for (let j = 0; j < minNumPoints; j++) {
 						const sourceIndex = choice[j];
 						const x = this.resizedX[sourceIndex];
@@ -200,20 +193,10 @@ class Shape {
 						const targetY = shape2.resizedY[targetIndex];
 						const distanceX = targetX - transformedX;
 						const distanceY = targetY - transformedY;
-						distancesSquared[j] = distanceX * distanceX + distanceY * distanceY;
-						rotatedX[j] = transformedX;
-						rotatedY[j] = transformedY;
+						sumOfSquares += distanceX * distanceX + distanceY * distanceY;
 					}
-					distancesSquared.sort(Sort.numericAscending);
-					const midIndex = minNumPoints >> 1;
-					let medianDistance;
-					if (minNumPoints & 1) {
-						medianDistance = distancesSquared[midIndex];
-					} else {
-						medianDistance = 0.5 * (distancesSquared[midIndex] + distancesSquared[midIndex - 1]);
-					}
-					if (medianDistance < minError) {
-						minError = medianDistance;
+					if (sumOfSquares < minError) {
+						minError = sumOfSquares;
 						minErrorChoice = choice;
 						minErrorChoice2 = choice2;
 						minErrorAlignmentIndex = alignmentIndex;
