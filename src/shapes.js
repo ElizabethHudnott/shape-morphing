@@ -151,16 +151,12 @@ class Shape {
 		const numPoints = this.numPoints;
 		const numPoints2 = shape2.numPoints;
 		const minNumPoints = Math.min(numPoints, numPoints2);
-		let minError = Infinity;
-		let minErrorChoice = new Array(minNumPoints);
-		let minErrorChoice2 = new Array(minNumPoints);
-		let minErrorAlignmentIndex = 0;
-		for (let i = 0; i < minNumPoints; i++) {
-			minErrorChoice[i] = Math.trunc(i * numPoints / minNumPoints);
-			minErrorChoice2[i] = Math.trunc(i * numPoints2 / minNumPoints);
-		}
 
 		let selectedRotation = 0;
+		let minError = Infinity;
+		let minErrorAlignmentIndex = 0;
+		let minErrorChoice, minErrorChoice2;
+
 		for (let i = 0; i < numPoints2; i++) {
 			for (let choice of Geometry.choices(numPoints, minNumPoints)) {
 				let rotation = shape2.angles[i] - this.angles[choice[0]];
@@ -169,10 +165,7 @@ class Shape {
 				} else if (rotation > Math.PI) {
 					rotation -= 2 * Math.PI;
 				}
-				if (Math.abs(rotation) > maxRotation) {
-					// Rotations bigger than a certain amount can be a bit dizzifying.
-					continue;
-				}
+				const performRotation = Math.abs(rotation) <= maxRotation;
 				const cos = Math.cos(rotation);
 				const sin = Math.sin(rotation);
 
@@ -186,8 +179,11 @@ class Shape {
 						const sourceIndex = choice[j];
 						const x = this.resizedX[sourceIndex];
 						const y = this.resizedY[sourceIndex];
-						const transformedX = x * cos - y * sin;
-						const transformedY = x * sin + y * cos;
+						let transformedX = x, transformedY = y;
+						if (performRotation) {
+							transformedX = x * cos - y * sin;
+							transformedY = x * sin + y * cos;
+						}
 						const targetIndex = choice2[(alignmentIndex + j) % minNumPoints];
 						const targetX = shape2.resizedX[targetIndex];
 						const targetY = shape2.resizedY[targetIndex];
