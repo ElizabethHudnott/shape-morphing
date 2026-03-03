@@ -165,7 +165,8 @@ class Shape {
 				} else if (rotation > Math.PI) {
 					rotation -= 2 * Math.PI;
 				}
-				const performRotation = Math.abs(rotation) <= maxRotation;
+
+				rotation = Math.min(Math.abs(rotation), maxRotation) * Math.sign(rotation);
 				const cos = Math.cos(rotation);
 				const sin = Math.sin(rotation);
 
@@ -179,11 +180,8 @@ class Shape {
 						const sourceIndex = choice[j];
 						const x = this.resizedX[sourceIndex];
 						const y = this.resizedY[sourceIndex];
-						let transformedX = x, transformedY = y;
-						if (performRotation) {
-							transformedX = x * cos - y * sin;
-							transformedY = x * sin + y * cos;
-						}
+						const transformedX = x * cos - y * sin;
+						const transformedY = x * sin + y * cos;
 						const targetIndex = choice2[(alignmentIndex + j) % minNumPoints];
 						const targetX = shape2.resizedX[targetIndex];
 						const targetY = shape2.resizedY[targetIndex];
