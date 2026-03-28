@@ -1,6 +1,7 @@
+import ColourMorph from './src/colour.js';
+import Ease from './src/easing.js';
 import {Geometry} from './src/math.js';
 import {Shape, RandomShape} from './src/shapes.js';
-import Ease from './src/easing.js';
 
 const DEFAULT_MAX_ROTATION = Math.PI / 2;
 
@@ -240,278 +241,6 @@ function moveLength(polygon1, polygon2) {
 	return Math.max(maxTranslation, maxArcLength);
 }
 
-class ConstantColour {
-
-	static BLACK = new ConstantColour('black');
-
-	constructor(colour) {
-		this.colour = colour;
-	}
-
-	interpolate(morph, interpolation) {
-		return this.colour;
-	}
-}
-
-class ColourMorph {
-
-	constructor(str, easings = (new Array(4)).fill(Ease.linear)) {
-		this.str = str.replace(/\s/g, '').replace(/[+\-]/g, ' $& ');
-		this.easings = easings;
-	}
-
-	interpolate(morph, interpolation) {
-		const values = this.easings.map(f => f(interpolation));
-		let str = this.str.replace(/\bw\b/g, values[0]);
-		str = str.replace(/\bx\b/g, values[1]);
-		str = str.replace(/\by\b/g, values[2]);
-		str = str.replace(/\bz\b/g, values[3]);
-		return str;
-	}
-
-}
-
-class VertexGradientMorph {
-
-	constructor(vertexNum1, vertexNum2, colourMorphs, offsets = [0, 1]) {
-		this.vertexNum1 = vertexNum1;
-		this.vertexNum2 = vertexNum2;
-		this.colourMorphs = colourMorphs;
-		this.offsets = offsets;
-	}
-
-	interpolate(morph, interpolation, context) {
-		const x1 = morph.pointsX[this.vertexNum1];
-		const y1 = morph.pointsY[this.vertexNum1];
-		const x2 = morph.pointsX[this.vertexNum2];
-		const y2 = morph.pointsY[this.vertexNum2];
-		const gradient = context.createLinearGradient(x1, y1, x2, y2);
-		for (let i = 0; i < this.offsets.length; i++) {
-			const colour = this.colourMorphs[i].interpolate(morph, interpolation);
-			gradient.addColorStop(this.offsets[i], colour);
-		}
-		return gradient;
-	}
-
-}
-
-class EdgeParallelGradientMorph {
-
-	constructor(vertexNum, colourMorphs, offsets = [0, 1]) {
-		this.vertexNum = vertexNum;
-		this.colourMorphs = colourMorphs;
-		this.offsets = offsets;
-	}
-
-	interpolate(morph, interpolation, context) {
-		const pointsX = morph.pointsX;
-		const pointsY = morph.pointsY;
-		const numPoints = pointsX.length;
-		const vertex1 =  this.vertexNum;
-		const vertex2 = (vertex1 + 1) % numPoints;
-		const edgeX1 = pointsX[vertex1];
-		const edgeY1 = pointsY[vertex1];
-		const edgeX2 = pointsX[vertex2];
-		const edgeY2 = pointsY[vertex2];
-		const [edgeDeltaX, a1, b1, c1, a2, b2] = Geometry.projectionOntoLine(edgeX1, edgeY1, edgeX2, edgeY2);
-
-		// Min and max x values and associated y values or min and max y and associated
-		// constant x value.
-		let minX, maxX, minY, maxY;
-		let invertDirection = false;
-		if (edgeX1 < edgeX2 || (edgeDeltaX === 0 && edgeY1 < edgeY2)) {
-			[minX, minY, maxX, maxY] = [edgeX1, edgeY1, edgeX2, edgeY2];
-		} else {
-			[minX, minY, maxX, maxY] = [edgeX2, edgeY2, edgeX1, edgeY1];
-			invertDirection = true;
-		}
-
-		for (let i = 1; i <= numPoints - 2; i++) {
-			const targetVertex = (vertex2 + i) % numPoints;
-			const targetX = pointsX[targetVertex];
-			const targetY = pointsY[targetVertex];
-			const [intersectX, intersectY] = Geometry.projectOntoLine(targetX, targetY, a1, b1, c1, a2, b2);
-
-			if (edgeDeltaX !== 0) {
-				if (intersectX < minX) {
-					[minX, minY] = [intersectX, intersectY];
-				} else if (intersectX > maxX) {
-					[maxX, maxY] = [intersectX, intersectY];
-				}
-			} else {
-				if (intersectY < minY) {
-					minY = intersectY;
-				} else if (intersectY > maxY) {
-					maxY = intersectY;
-				}
-			}
-
-		}
-
-		let gradient;
-		if (!invertDirection) {
-			gradient = context.createLinearGradient(minX, minY, maxX, maxY);
-		} else {
-			gradient = context.createLinearGradient(maxX, maxY, minX, minY);
-		}
-		for (let i = 0; i < this.offsets.length; i++) {
-			const colour = this.colourMorphs[i].interpolate(morph, interpolation);
-			gradient.addColorStop(this.offsets[i], colour);
-		}
-		return gradient;
-	}
-
-}
-
-class EdgePerpendicularGradientMorph {
-
-	constructor(vertexNum, colourMorphs, offsets = [0, 1]) {
-		this.vertexNum = vertexNum;
-		this.targetVertex = undefined;
-		this.colourMorphs = colourMorphs;
-		this.offsets = offsets;
-	}
-
-	beginPrecalculation(numPoints) {
-		const counts = new Array(numPoints);
-		counts.fill(0);
-		return counts;
-	}
-
-	precalculate(counts, pointsX, pointsY, interpolation) {
-		const numPoints = pointsX.length;
-		const vertex1 =  this.vertexNum;
-		const vertex2 = (vertex1 + 1) % numPoints;
-		const edgeX1 = pointsX[vertex1];
-		const edgeY1 = pointsY[vertex1];
-		const edgeX2 = pointsX[vertex2];
-		const edgeY2 = pointsY[vertex2];
-		const [edgeDeltaX, a1, b1, c1, a2, b2] = Geometry.projectionOntoLine(edgeX1, edgeY1, edgeX2, edgeY2);
-
-		let maxDistanceSq = 0;
-		let targetVertex = 0;
-		for (let i = 0; i < numPoints; i++) {
-			const targetX = pointsX[i];
-			const targetY = pointsY[i];
-			const [intersectX, intersectY] = Geometry.projectOntoLine(targetX, targetY, a1, b1, c1, a2, b2);
-			const [measureX, measureY] = Geometry.constrainToLineSegment(
-				intersectX, intersectY, edgeX1, edgeY1, edgeX2, edgeY2
-			);
-
-			const gradientDeltaX = targetX - measureX;
-			const gradientDeltaY = targetY - measureY;
-			const distanceSq = gradientDeltaX * gradientDeltaX + gradientDeltaY * gradientDeltaY;
-			if (distanceSq > maxDistanceSq) {
-				targetVertex = i;
-				maxDistanceSq = distanceSq;
-			}
-		}
-		counts[targetVertex]++;
-	}
-
-	endPrecalculation(counts) {
-		const numPoints = counts.length;
-		let targetVertex = 0;
-		let maxCount = 0;
-		for (let i = 0; i < numPoints; i++) {
-			const count = counts[i];
-			if (count > maxCount) {
-				targetVertex = i;
-				maxCount = count;
-			}
-		}
-		this.targetVertex = targetVertex;
-	}
-
-	interpolate(morph, interpolation, context) {
-		const pointsX = morph.pointsX;
-		const pointsY = morph.pointsY;
-		const numPoints = pointsX.length;
-		const vertex1 =  this.vertexNum;
-		const vertex2 = (vertex1 + 1) % numPoints;
-		const edgeX1 = pointsX[vertex1];
-		const edgeY1 = pointsY[vertex1];
-		const edgeX2 = pointsX[vertex2];
-		const edgeY2 = pointsY[vertex2];
-		const [edgeDeltaX, a1, b1, c1, a2, b2] = Geometry.projectionOntoLine(edgeX1, edgeY1, edgeX2, edgeY2);
-
-		const x2 = pointsX[this.targetVertex];
-		const y2 = pointsY[this.targetVertex];
-		const c2 = -a2 * x2 - b2 * y2;
-		const denominator = a1 * b2 - a2 * b1;
-		const x1 = (b1 * c2 - b2 * c1) / denominator;
-		const y1 = (c1 * a2 - c2 * a1) / denominator;
-
-		const gradient = context.createLinearGradient(x1, y1, x2, y2);
-		for (let i = 0; i < this.offsets.length; i++) {
-			const colour = this.colourMorphs[i].interpolate(morph, interpolation);
-			gradient.addColorStop(this.offsets[i], colour);
-		}
-		return gradient;
-	}
-
-}
-
-class VertexConicGradientMorph {
-
-	constructor(vertexNum, colourMorphs, offsets = [0, 1]) {
-		this.vertexNum = vertexNum;
-		this.colourMorphs = colourMorphs;
-		this.offsets = offsets;
-	}
-
-	interpolate(morph, interpolation, context) {
-		const pointsX = morph.pointsX;
-		const pointsY = morph.pointsY;
-		const numPoints = pointsX.length
-		const vertex1 = (this.vertexNum + numPoints - 1) % numPoints;
-		const vertex2 =  this.vertexNum;
-		const vertex3 = (vertex2 + 1) % numPoints;
-		const x1 = pointsX[vertex1];
-		const y1 = pointsY[vertex1];
-		const x2 = pointsX[vertex2];
-		const y2 = pointsY[vertex2];
-		const x3 = pointsX[vertex3];
-		const y3 = pointsY[vertex3];
-		const startAngle = Math.atan2(y1 - y2, x1 - x2);
-		let endAngle = Math.atan2(y3 - y2, x3 - x2);
-		if (endAngle < startAngle) {
-			endAngle += 2 * Math.PI;
-		}
-		const turnAmount = (endAngle - startAngle) / (2 * Math.PI);
-		const gradient = context.createConicGradient(startAngle, x2, y2);
-		for (let i = 0; i < this.offsets.length; i++) {
-			const colour = this.colourMorphs[i].interpolate(morph, interpolation);
-			gradient.addColorStop(turnAmount * this.offsets[i], colour);
-		}
-		return gradient;
-	}
-
-}
-
-class CentreConicGradientMorph {
-
-	constructor(colourMorphs, offsets = [0, 1], startAngle = 0, endAngle = startAngle) {
-		this.startAngle = startAngle;
-		this.endAngle = endAngle;
-		this.angleEase = Ease.linear;
-		this.colourMorphs = colourMorphs;
-		this.offsets = offsets;
-	}
-
-	interpolate(morph, interpolation, context) {
-		const t = this.angleEase(interpolation);
-		const angle = this.endAngle * t + this.startAngle * (1 - t);
-		const gradient = context.createConicGradient(angle, 0, 0);
-		for (let i = 0; i < this.offsets.length; i++) {
-			const colour = this.colourMorphs[i].interpolate(morph, interpolation);
-			gradient.addColorStop(this.offsets[i], colour);
-		}
-		return gradient;
-	}
-
-}
-
 class StrokeStyle {
 	constructor() {
 		this.width = undefined;
@@ -671,7 +400,7 @@ class StrokeMorph {
 
 class ShadowMorph {
 
-	constructor(startLength, endLength, blur = 0.25, colourMorph = ConstantColour.BLACK) {
+	constructor(startLength, endLength, blur = 0.25, colourMorph = ColourMorph.Constant.BLACK) {
 		this.startLength = startLength;
 		this.endLength = endLength;
 		this.lengthEase = Ease.quadInOut;
@@ -763,20 +492,44 @@ class Morph {
 		this.numFrames = numFrames;
 		this.interpolationStep = 1 / numFrames;
 
+
+		function noOp() {
+			// Do nothing.
+		}
+
+		const numPoints = polygon2.numPoints;
+		let hasPrecalculation = false;
+		let fillState, strokeState;
+		let fillPrecalc = noOp, strokePrecalc = noOp, fillEndPrecalc;
+		let endFillPrecalc = noOp, endStrokePrecalc = noOp;
 		if (this.fillMorph?.precalculate) {
-			const numPoints = polygon2.numPoints;
+			fillState = this.fillMorph.beginPrecalculation(numPoints);
+			fillPrecalc = this.fillMorph.precalculate.bind(this.fillMorph);
+			endFillPrecalc = this.fillMorph.endPrecalculation(this.fillMorph);
+			hasPrecalculation = true;
+		}
+		if (this.strokeMorph?.colourMorph?.precalculate) {
+			strokeState = this.strokeMorph.colourMorph.beginPrecalculation(numPoints)
+			strokePrecalc = this.strokeMorph.colourMorph.precalculate.bind(this.strokeMorph.colourMorph);
+			endStrokePrecalc = this.strokeMorph.colourMorph.endPrecalculation.bind(this.strokeMorph.colourMorph);
+			hasPrecalculation = true;
+		} else {
+
+		}
+		if (hasPrecalculation) {
 			const pointsX = new Array(numPoints);
 			const pointsY = new Array(numPoints);
-			const state = this.fillMorph.beginPrecalculation(numPoints);
 			for (let i = 0; i <= numFrames; i++) {
 				const interpolation = i / numFrames;
 				for (let j = 0; j < numPoints; j++) {
 					pointsX[j] = polygon2.rotatedX[j] - (1 - interpolation) * polygon2.offsetsX[j];
 					pointsY[j] = polygon2.rotatedY[j] - (1 - interpolation) * polygon2.offsetsY[j];
 				}
-				this.fillMorph.precalculate(state, pointsX, pointsY, interpolation);
+				fillPrecalc(fillState, pointsX, pointsY, interpolation);
+				strokePrecalc(strokeState, pointsX, pointsY, interpolation);
 			}
-			this.fillMorph.endPrecalculation(state);
+			endFillPrecalc(fillState);
+			endStrokePrecalc(strokeState);
 		}
 	}
 
@@ -1009,7 +762,7 @@ let mode, fillMorph;
 const fillStr = parameters.get('fill');
 if (fillStr) {
 	// Use %25 to write % inside a URL, %2B to write +, %23 to write #.
-	fillMorph = new ColourMorph(fillStr);
+	fillMorph = new ColourMorph.Colour(fillStr);
 }
 
 switch (parameters.get('render')) {
@@ -1017,14 +770,16 @@ case 'overlay':
 	mode = Mode.OVERLAY;
 	speed ||= 50;
 	if (!fillMorph) {
-		fillMorph = new ColourMorph('rgb(calc(255-510*x), min(255*x, 255-255*x), calc(510*x-255))');
+		fillMorph = new ColourMorph.Colour(
+			'rgb(calc(255-510*x), min(255*x, 255-255*x), calc(510*x-255))'
+		);
 	}
 	break;
 default:
 	mode = Mode.ANIMATE;
 	speed ||= 5;
 	if (!fillMorph) {
-		fillMorph = new ConstantColour('#00ff0063');
+		fillMorph = new ColourMorph.Constant('#00ff0063');
 	}
 }
 
@@ -1049,7 +804,7 @@ if (mode === Mode.OVERLAY && polygon2.size > polygon1.size) {
 
 const fillStr2 = parameters.get('fill2');
 if (fillStr2) {
-	const toColour = new ColourMorph(fillStr2);
+	const toColour = new ColourMorph.Colour(fillStr2);
 	const gradientType = parseInt(parameters.get('gradient'));
 	/* 1 Edge to vertex
 	 * 2 Along an edge
@@ -1059,24 +814,24 @@ if (fillStr2) {
 	 */
 	switch (gradientType) {
 	case 2:
-		fillMorph = new EdgeParallelGradientMorph(0, [fillMorph, toColour]);
+		fillMorph = new ColourMorph.EdgeParallelGradient(0, [fillMorph, toColour]);
 		break;
 	case 3:
 		const toVertex = Math.trunc(numVertices / 2);
-		fillMorph = new VertexGradientMorph(0, toVertex, [fillMorph, toColour]);
+		fillMorph = new ColourMorph.VertexVertexGradient(0, toVertex, [fillMorph, toColour]);
 		break;
 	case 4:
-		fillMorph = new VertexConicGradientMorph(0, [fillMorph, toColour]);
+		fillMorph = new ColourMorph.VertexConicGradient(0, [fillMorph, toColour]);
 		break;
 	case 5:
 		const spin = (parseFloat(parameters.get('spin')) || 0) * Math.PI / 180;
-		fillMorph = new CentreConicGradientMorph(
+		fillMorph = new ColourMorph.CentreConicGradient(
 			[fillMorph, toColour, fillMorph], [0, 0.5, 1], 0, spin
 		);
 		fillMorph.angleEase = Ease.expOut(3);
 		break;
-	default:
-		fillMorph = new EdgePerpendicularGradientMorph(0, [fillMorph, toColour]);
+	default: // aka Case 1
+		fillMorph = new ColourMorph.EdgePerpendicularGradient(0, [fillMorph, toColour]);
 	}
 }
 
@@ -1132,16 +887,23 @@ if (hasEndLineWidth && !hasStartLineWidth) {
 	startLineWidth = DEFAULT_LINE_WIDTH;
 }
 if (hasStrokeColour) {
-	strokeColourMorph = new ColourMorph(parameters.get('stroke'));
+	strokeColourMorph = new ColourMorph.Colour(parameters.get('stroke'));
 	if (parameters.has('stroke2')) {
-		toColour = new ColourMorph(parameters.get('stroke2'));
+		const toColour = new ColourMorph.Colour(parameters.get('stroke2'));
 		const gradientType = parseInt(parameters.get('stroke_gradient'));
 		switch (gradientType) {
-		case 2:
-			strokeColourMorph = new EdgeParallelGradientMorph(0, [strokeColourMorph, toColour]);
+		case 1:
+			strokeColourMorph = new ColourMorph.EdgePerpendicularGradient(
+				0, [strokeColourMorph, toColour]
+			);
 			break;
-		default:
-			strokeColourMorph = new CentreConicGradientMorph(
+		case 2:
+			strokeColourMorph = new ColourMorph.EdgeParallelGradient(
+				0, [strokeColourMorph, toColour]
+			);
+			break;
+		default: // aka Case 5
+			strokeColourMorph = new ColourMorph.CentreConicGradient(
 				[strokeColourMorph, toColour, strokeColourMorph],
 				[0, 0.5, 1]
 			);
@@ -1193,7 +955,7 @@ let shadowMorph = undefined;
 if (startShadowLength !== 0 || endShadowLength !== 0) {
 	const shadowColourStr = parameters.get('shadow_colour');
 	const shadowColourMorph = shadowColourStr ?
-		new ColourMorph(shadowColourStr) : ConstantColour.BLACK;
+		new ColourMorph.Colour(shadowColourStr) : ColourMorph.Constant.BLACK;
 	shadowMorph = new ShadowMorph(
 		startShadowLength, endShadowLength, shadowBlur, shadowColourMorph
 	);
