@@ -244,6 +244,58 @@ function centroid(pointsX, pointsY) {
 	return [centreX, centreY];
 }
 
+function getPerimeterOffsets(pointsX, pointsY, closed) {
+	const numPoints = pointsX.length;
+	const segmentOffsets = new Array(numPoints);
+	segmentOffsets[0] = 0;
+	let totalLength = 0;
+	let prevX = pointsX[0];
+	let prevY = pointsY[0];
+	for (let i = 1; i < numPoints; i++) {
+		const x = pointsX[i];
+		const y = pointsY[i];
+		totalLength += Math.hypot(x - prevX, y - prevY);
+		segmentOffsets[i] = totalLength;
+		prevX = x;
+		prevY = y;
+	}
+	if (closed) {
+		totalLength += Math.hypot(pointsX[0] - prevX, pointsY[0] - prevY);
+	}
+	for (let i = 1; i < numPoints; i++) {
+		segmentOffsets[i] /= totalLength;
+	}
+	return segmentOffsets;
+}
+
+function getPerimeterOffset(amount, pointsX, pointsY, segmentOffsets, closed) {
+	const numPoints = segmentOffsets.length;
+	let vertex = 0;
+	while (
+		vertex < numPoints + closed - 2 &&
+		amount > segmentOffsets[vertex + 1]
+	) {
+		vertex++;
+	}
+	const x1 = pointsX[vertex];
+	const y1 = pointsY[vertex];
+	let nextVertex = vertex + 1;
+	let add = 0;
+	if (nextVertex === numPoints) {
+		nextVertex = 0;
+		add = 1;
+	}
+	const x2 = pointsX[nextVertex];
+	const y2 = pointsY[nextVertex];
+	const offset1 = segmentOffsets[vertex];
+	const offset2 = segmentOffsets[nextVertex] + add;
+	const proportion = (amount - offset1) / (offset2 - offset1);
+	const x = x1 * (1 - proportion) + x2 * proportion;
+	const y = y1 * (1 - proportion) + y2 * proportion;
+
+	return [vertex, proportion, x, y];
+}
+
 const Geometry = {
 	choices: choices,
 	gcd: gcd,
@@ -251,6 +303,8 @@ const Geometry = {
 	centroid: centroid,
 	constrainToLineSegment: constrainToLineSegment,
 	orderPolygonPoints: orderPolygonPoints,
+	getPerimeterOffsets: getPerimeterOffsets,
+	getPerimeterOffset: getPerimeterOffset,
 	projectionOntoLine: projectionOntoLine,
 	projectOntoLine: projectOntoLine,
 	triangleArea: triangleArea,
