@@ -217,6 +217,8 @@ class Shape {
 
 		let numInserted = 0;
 		if (numPoints < numPoints2) {
+
+			// Add vertices to source shape.
 			let lastTarget = minErrorChoice2[minErrorAlignmentIndex];
 			let edgeX1 = this.rotatedX[0];
 			let edgeY1 = this.rotatedY[0];
@@ -253,6 +255,7 @@ class Shape {
 
 		} else if (numPoints > numPoints2) {
 
+			// Add vertices to destination shape.
 			let lastSource = minErrorChoice[0];
 			let edgeX1 = shape2.resizedX[minErrorAlignmentIndex];
 			let edgeY1 = shape2.resizedY[minErrorAlignmentIndex];

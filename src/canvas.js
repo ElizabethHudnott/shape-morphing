@@ -52,6 +52,7 @@ function drawVertexMap(context, polygon1, polygon2) {
 	context.save();
 	context.translate(0.5 * canvas.width,  0.5 * canvas.height);
 
+	// Draw first polygon in red.
 	context.beginPath();
 	context.moveTo(polygon1.deltaX[0], polygon1.deltaY[0]);
 	for (let i = 1; i < numPoints; i++) {
@@ -61,6 +62,7 @@ function drawVertexMap(context, polygon1, polygon2) {
 	context.fillStyle = 'rgba(255, 0, 0, 70%)';
 	context.fill();
 
+	// Draw second polygon in green.
 	context.beginPath();
 	context.moveTo(polygon2.rotatedX[0], polygon2.rotatedY[0]);
 	for (let i = 1; i < numPoints; i++) {
@@ -70,6 +72,7 @@ function drawVertexMap(context, polygon1, polygon2) {
 	context.fillStyle = 'rgba(0, 255, 0, 70%)';
 	context.fill();
 
+	// Draw lines between equal numbered vertices.
 	for (let i = 0; i < numPoints; i++) {
 		const x2 = polygon2.rotatedX[i];
 		const y2 = polygon2.rotatedY[i]
@@ -84,6 +87,7 @@ function drawVertexMap(context, polygon1, polygon2) {
 		context.strokeStyle = gradient;
 		context.stroke();
 	}
+
 	context.restore();
 }
 
