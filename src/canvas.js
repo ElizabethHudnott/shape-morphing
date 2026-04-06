@@ -30,7 +30,7 @@ function tracePolylinePath(context, pointsX, pointsY, closed = true, start = 0, 
 	}
 }
 
-function drawInterpolatedShape(context, morph, interpolation) {
+function drawInterpolatedShape(context, morph) {
 	tracePolygonPath(context, morph.pointsX, morph.pointsY);
 	context.fill();
 
@@ -42,6 +42,18 @@ function drawInterpolatedShape(context, morph, interpolation) {
 		);
 		context.globalAlpha = 1;
 		context.shadowColor = 'transparent';
+		context.stroke();
+	}
+}
+
+function drawStrings(context, morph) {
+	if (morph.customMorph.width !== undefined) {
+		context.lineWidth = morph.customMorph.width;
+	}
+	for (let line of morph.customMorph.lines) {
+		context.beginPath();
+		context.moveTo(line.x1, line.y1);
+		context.lineTo(line.x2, line.y2);
 		context.stroke();
 	}
 }
@@ -96,5 +108,6 @@ export default {
 	tracePolygonPath: tracePolygonPath,
 	tracePolylinePath: tracePolylinePath,
 	drawInterpolatedShape: drawInterpolatedShape,
+	drawStrings: drawStrings,
 	drawVertexMap: drawVertexMap,
 };

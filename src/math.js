@@ -244,6 +244,24 @@ function centroid(pointsX, pointsY) {
 	return [centreX, centreY];
 }
 
+function perimeter(pointsX, pointsY, closed) {
+	const numPoints = pointsX.length;
+	let totalLength = 0;
+	let prevX = pointsX[0];
+	let prevY = pointsY[0];
+	for (let i = 1; i < numPoints; i++) {
+		const x = pointsX[i];
+		const y = pointsY[i];
+		totalLength += Math.hypot(x - prevX, y - prevY);
+		prevX = x;
+		prevY = y;
+	}
+	if (closed) {
+		totalLength += Math.hypot(pointsX[0] - prevX, pointsY[0] - prevY);
+	}
+	return totalLength;
+}
+
 function getPerimeterOffsets(pointsX, pointsY, closed) {
 	const numPoints = pointsX.length;
 	const segmentOffsets = new Array(numPoints);
@@ -303,6 +321,7 @@ const Geometry = {
 	centroid: centroid,
 	constrainToLineSegment: constrainToLineSegment,
 	orderPolygonPoints: orderPolygonPoints,
+	perimeter: perimeter,
 	getPerimeterOffsets: getPerimeterOffsets,
 	getPerimeterOffset: getPerimeterOffset,
 	projectionOntoLine: projectionOntoLine,

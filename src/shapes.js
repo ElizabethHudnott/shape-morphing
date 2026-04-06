@@ -3,6 +3,7 @@
 import {Geometry, Sort} from './math.js';
 
 class Shape {
+	#perimeter;
 
 	/**Constructs a new shape from two arrays of x and y coordinates and performs the following
 	 * operations.
@@ -82,11 +83,24 @@ class Shape {
 		return this.pointsX.length;
 	}
 
+	perimeter(closed) {
+		let length = this.#perimeter;
+		if (closed) {
+			const numPoints = this.numPoints;
+			length += Math.hypot(
+				this.resizedX[0] - this.resizedX[numPoints - 1],
+				this.resizedY[0] - this.resizedY[numPoints - 1]
+			);
+		}
+		return length;
+	}
+
 	resetTransform() {
 		const deltaX = this.deltaX;
 		const deltaY = this.deltaY;
 		this.resizedX = deltaX.slice();
 		this.resizedY = deltaY.slice();
+		this.#perimeter = Geometry.perimeter(deltaX, deltaY, false);
 		this.scaleFactor = 1;
 		this.rotatedX = deltaX.slice();
 		this.rotatedY = deltaY.slice();
@@ -109,6 +123,7 @@ class Shape {
 			this.resizedX[i] = radius * Math.cos(angle);
 			this.resizedY[i] = radius * Math.sin(angle);
 		}
+		this.#perimeter = Geometry.perimeter(this.resizedX, this.resizedY, false);
 		this.scaleFactor = scale;
 	}
 
@@ -584,13 +599,24 @@ class Path {
 
 }
 
+class Line {
+	constructor(x1, y1, x2, y2, colour) {
+		this.x1 = x1;
+		this.y1 = y1;
+		this.x2 = x2;
+		this.y2 = y2;
+		this.colour = colour;
+	}
+}
+
 const RandomShape = {
 	polygonPoints: randomPolygonPoints,
 	cyclicPolygonPoints: cyclicPolygonPoints,
 }
 
 export {
+	Line,
+	Path,
 	Shape,
 	RandomShape,
-	Path,
 };

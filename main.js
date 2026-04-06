@@ -2,9 +2,7 @@ import Canvas from './src/canvas.js';
 import ColourMorph from './src/colour.js';
 import Ease from './src/easing.js';
 import {Geometry} from './src/math.js';
-import {Shape, RandomShape} from './src/shapes.js';
-
-const DEFAULT_MAX_ROTATION = Math.PI / 2;
+import {Line, Shape, RandomShape} from './src/shapes.js';
 
 function alignLeftOrTop(values) {
 	const numValues = values.length;
@@ -352,11 +350,88 @@ class ShadowMorph {
 
 }
 
-class Morph {
+class StringArtMorph {
 
 	constructor(
-		polygon1, polygon2, fillMorph, strokeMorph, shadowMorph, blendMode = 'source-over',
-		startBlur = 0, endBlur = startBlur, maxRotation = DEFAULT_MAX_ROTATION
+		startNumStrings, startIncrement, closed,
+		endNumStrings = startNumStrings, endIncrement = startIncrement
+	) {
+		this.startNumStrings = startNumStrings;
+		this.startIncrement = startIncrement;
+		this.closed = closed;
+		this.endNumStrings = endNumStrings;
+		this.endIncrement = endIncrement;
+
+		this.startWidth = undefined;
+		this.endWidth = undefined;
+		this.widthEase = Ease.linear;
+
+		this.colourMorph = undefined;
+		this.colourRepeat = undefined;
+
+		this.lines = [];
+		this.width = undefined;
+	}
+
+	setWidth(start, end = start) {
+		this.startWidth = start;
+		this.endWidth = end;
+	}
+
+	setColour(colourMorph, repeatLength) {
+		this.colourMorph = colourMorph;
+		this.colourRepeat = repeatLength;
+	}
+
+	interpolate(morph, interpolation, context) {
+		const perimeter1 = morph.polygon1.perimeter(this.closed);
+		const perimeter2 = morph.polygon2.perimeter(this.closed);
+		const perimeter = Geometry.perimeter(morph.pointsX, morph.pointsY, this.closed);
+		let t = Math.min(Math.max((perimeter - perimeter1) / (perimeter2 - perimeter1), 0), 1);
+		const numStrings = this.startNumStrings * (1 - t) + this.endNumStrings * t;
+		const increment = this.startIncrement * (1 - t) + this.endIncrement * t;
+
+		const vertexFractions = Geometry.getPerimeterOffsets(
+			morph.pointsX, morph.pointsY, this.closed
+		);
+		this.lines = [];
+		for (let i = numStrings - Math.trunc(numStrings); i < numStrings; i++) {
+			const startFraction = i / numStrings;
+			let endFraction = startFraction + increment;
+			if (endFraction > 1) {
+				if (this.closed) {
+					endFraction %= 1;
+				} else {
+					break;
+				}
+			}
+			const [vertex1, proportion1, x1, y1] = Geometry.getPerimeterOffset(
+				startFraction, morph.pointsX, morph.pointsY, vertexFractions, this.closed
+			);
+			const [vertex2, proportion2, x2, y2] = Geometry.getPerimeterOffset(
+				endFraction, morph.pointsX, morph.pointsY, vertexFractions, this.closed
+			);
+			this.lines.push(new Line(x1, y1, x2, y2));
+		}
+
+		if (this.startWidth !== undefined) {
+			t = this.widthEase(interpolation);
+			this.width = this.startWidth * (1 - t) + t * this.endWidth;
+		}
+	}
+
+}
+
+/**Represents calculation of a morph independently from the API or library used to draw the
+ * shapes.
+ */
+class Morph {
+
+	static DEFAULT_MAX_ROTATION = Math.PI / 2;
+
+	constructor(
+		polygon1, polygon2, fillMorph, strokeMorph, blendMode = 'source-over',
+		startBlur = 0, endBlur = startBlur, maxRotation = Morph.DEFAULT_MAX_ROTATION
 	) {
 		polygon2.resize(polygon1.size);
 		polygon2.rotate(polygon1, maxRotation);
@@ -384,9 +459,11 @@ class Morph {
 		this.fillStyle = 'black';
 		this.strokeMorph = strokeMorph;
 		this.stroke = undefined;
-		this.shadowMorph = shadowMorph;
-		this.blendMode = blendMode;
+		this.shadowMorph = undefined;
+		// E.g. for producing string art.
+		this.customMorph = undefined;
 
+		this.blendMode = blendMode;
 		this.startBlur = startBlur;
 		this.endBlur = endBlur;
 		this.blurEase = Ease.linear;
@@ -424,8 +501,6 @@ class Morph {
 			strokePrecalc = this.strokeMorph.colourMorph.precalculate.bind(this.strokeMorph.colourMorph);
 			endStrokePrecalc = this.strokeMorph.colourMorph.endPrecalculation.bind(this.strokeMorph.colourMorph);
 			hasPrecalculation = true;
-		} else {
-
 		}
 		if (hasPrecalculation) {
 			const pointsX = new Array(numPoints);
@@ -444,6 +519,9 @@ class Morph {
 		}
 	}
 
+	/**
+	 * context {Object} Any object supporting createConicGradient, createLinearGradient and createRadialGradient.
+	 */
 	interpolate(interpolation, context, lightSourceX, lightSourceY) {
 		const polygon1 = this.polygon1;
 		const polygon2 = this.polygon2;
@@ -479,11 +557,25 @@ class Morph {
 		if (this.shadowMorph) {
 			this.shadowMorph.interpolate(this, interpolation, lightSourceX, lightSourceY);
 		}
+		if (this.customMorph) {
+			this.customMorph.interpolate(this, interpolation, context);
+		}
 
 		if (this.startBlur !== undefined) {
 			t = this.blurEase(interpolation);
 			this.blur = this.startBlur * (1 - t) + this.endBlur * t;
 		}
+	}
+
+}
+
+class Canvas2DMorph extends Morph {
+
+	constructor(
+		polygon1, polygon2, fillMorph, strokeMorph, blendMode = 'source-over',
+		startBlur = 0, endBlur = startBlur, maxRotation = Morph.DEFAULT_MAX_ROTATION
+	) {
+		super(polygon1, polygon2, fillMorph, strokeMorph, blendMode, startBlur, endBlur, maxRotation);
 	}
 
 	transform(context) {
@@ -785,7 +877,7 @@ let maxRotation = parseInt(parameters.get('max_rotation'));
 if (Number.isFinite(maxRotation)) {
 	maxRotation *= Math.PI / 180;
 } else {
-	maxRotation = DEFAULT_MAX_ROTATION;
+	maxRotation = Morph.DEFAULT_MAX_ROTATION;
 }
 
 let startShadowLength = parseFloat(parameters.get('shadow'));
@@ -821,10 +913,31 @@ sunX *= canvas.width;
 let sunY = parseFloat(parameters.get('sun_y')) || 0;
 sunY *= canvas.height;
 
-const morph = new Morph(
-	polygon1, polygon2, fillMorph, strokeMorph, shadowMorph, blendMode, startBlur, endBlur,
+const morph = new Canvas2DMorph(
+	polygon1, polygon2, fillMorph, strokeMorph, blendMode, startBlur, endBlur,
 	maxRotation
 );
+morph.shadowMorph = shadowMorph;
+
+const startNumStrings = parseInt(parameters.get('strings'));
+if (Number.isFinite(startNumStrings)) {
+	let endNumStrings = parseInt(parameters.get('strings2'));
+	if (!Number.isFinite(endNumStrings)) {
+		endNumStrings = startNumStrings;
+	}
+	let startIncrement = parseFloat(parameters.get('string_add'));
+	if (!Number.isFinite(startIncrement)) {
+		startIncrement = 1 / startNumStrings;
+	}
+	let endIncrement = parseFloat(parameters.get('string_add2'));
+	if (!Number.isFinite(endIncrement)) {
+		endIncrement = startIncrement;
+	}
+	morph.customMorph = new StringArtMorph(
+		startNumStrings, startIncrement, true, endNumStrings, endIncrement
+	);
+}
+
 morph.setSpeed(speed);
 
 let translateEase = Ease.quadInOut;
