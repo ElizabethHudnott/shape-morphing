@@ -51,6 +51,10 @@ function layoutPolygons(pointsGenerator, numPoints, numPoints2 = numPoints) {
 	let pointsX1, pointsY1, pointsX2, pointsY2;
 	const width = canvas.width;
 	const height = canvas.height;
+	const swap = Math.random() < 0.5;
+	if (swap) {
+		[numPoints, numPoints2] = [numPoints2, numPoints];
+	}
 	const r = Math.random();
 	if (r < 0.5) {
 		// Case 1: Top left and bottom right
@@ -91,7 +95,7 @@ function layoutPolygons(pointsGenerator, numPoints, numPoints2 = numPoints) {
 	}
 	const shape1 = new Shape(pointsX1, pointsY1);
 	const shape2 = new Shape(pointsX2, pointsY2);
-	return Math.random() < 0.5 ? [shape1, shape2] : [shape2, shape1];
+	return swap ? [shape2, shape1] : [shape1, shape2];
 }
 
 function moveLength(polygon1, polygon2) {
@@ -682,6 +686,11 @@ function drawSourceShapes(context, morph, interpolation) {
 	}
 }
 
+function drawShapeAndStrings(context, morph) {
+	Canvas.drawInterpolatedShape(context, morph);
+	Canvas.drawStrings(context, morph);
+}
+
 function drawFaded(context, morph, interpolation) {
 	const alpha = Math.max(Math.round(255 / morph.numFrames), 1) / 255;
 	context.globalAlpha = alpha;
@@ -926,12 +935,15 @@ if (Number.isFinite(startNumStrings)) {
 		endNumStrings = startNumStrings;
 	}
 	let startIncrement = parseFloat(parameters.get('string_add'));
+	let endIncrement;
 	if (!Number.isFinite(startIncrement)) {
-		startIncrement = 1 / startNumStrings;
-	}
-	let endIncrement = parseFloat(parameters.get('string_add2'));
-	if (!Number.isFinite(endIncrement)) {
-		endIncrement = startIncrement;
+		startIncrement = 1 / numVertices;
+		endIncrement = 1 / numVertices2;
+	} else {
+		endIncrement = parseFloat(parameters.get('string_add2'));
+		if (!Number.isFinite(endIncrement)) {
+			endIncrement = startIncrement;
+		}
 	}
 	morph.customMorph = new StringArtMorph(
 		startNumStrings, startIncrement, true, endNumStrings, endIncrement
@@ -947,7 +959,8 @@ morph.translateYEase = translateEase;
 switch (mode) {
 case Mode.ANIMATE:
 	// Draw as an animation.
-	morph.animate(context, Canvas.drawInterpolatedShape, drawSourceShapes, sunX, sunY);
+	const drawFunction = morph.customMorph ? drawShapeAndStrings : Canvas.drawInterpolatedShape;
+	morph.animate(context, drawFunction, drawSourceShapes, sunX, sunY);
 	break;
 case Mode.OVERLAY:
 	// Draw with successive frames overlaid on top of each other.
