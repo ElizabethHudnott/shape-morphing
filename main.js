@@ -403,8 +403,8 @@ class StringArtMorph {
 			numPoints = Math.trunc(numPoints);
 		}
 
-		let start = this.startOffset * (1 - t) + this.endOffset * t;
-		start += pointFraction / (numPoints + 1) * numPoints;
+		let offset = this.startOffset * (1 - t) + this.endOffset * t;
+		offset += pointFraction / (numPoints + 1) * numPoints;
 
 		let mod = this.startNumPoints % this.startIncrement;
 		if (mod > 0.5 * this.startIncrement) {
@@ -418,20 +418,19 @@ class StringArtMorph {
 			morph.pointsX, morph.pointsY, this.closed
 		);
 		this.lines = [];
+		let start = 0;
 		for (let i = 0; i < numPoints; i++) {
 			let end = start + increment;
-			if (end > numPoints) {
-				if (this.closed) {
-					end %= numPoints;
-				} else {
-					break;
-				}
+			if (end + offset > numPoints && !this.closed) {
+				break;
 			}
 			const [vertex1, proportion1, x1, y1] = Geometry.getPerimeterOffset(
-				start / numPoints, morph.pointsX, morph.pointsY, vertexFractions, this.closed
+				((start + offset) % numPoints) / numPoints,
+				morph.pointsX, morph.pointsY, vertexFractions, this.closed
 			);
 			const [vertex2, proportion2, x2, y2] = Geometry.getPerimeterOffset(
-				end / numPoints, morph.pointsX, morph.pointsY, vertexFractions, this.closed
+				((end + offset) % numPoints) / numPoints,
+				morph.pointsX, morph.pointsY, vertexFractions, this.closed
 			);
 			this.lines.push(new Line(x1, y1, x2, y2));
 			start = end;
