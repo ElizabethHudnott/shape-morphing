@@ -357,14 +357,15 @@ class ShadowMorph {
 class StringArtMorph {
 
 	constructor(
-		startNumStrings, startIncrement, closed,
-		endNumStrings = startNumStrings, endIncrement = startIncrement
+		startNumPoints, startOffset, startIncrement, closed,
+		endNumPoints = startNumPoints, endOffset = startOffset
 	) {
-		this.startNumStrings = startNumStrings;
+		this.startNumPoints = startNumPoints;
+		this.startOffset = startOffset;
 		this.startIncrement = startIncrement;
 		this.closed = closed;
-		this.endNumStrings = endNumStrings;
-		this.endIncrement = endIncrement;
+		this.endNumPoints = endNumPoints;
+		this.endOffset = endOffset;
 
 		this.startWidth = undefined;
 		this.endWidth = undefined;
@@ -392,30 +393,48 @@ class StringArtMorph {
 		const perimeter2 = morph.polygon2.perimeter(this.closed);
 		const perimeter = Geometry.perimeter(morph.pointsX, morph.pointsY, this.closed);
 		let t = Math.min(Math.max((perimeter - perimeter1) / (perimeter2 - perimeter1), 0), 1);
-		const numStrings = this.startNumStrings * (1 - t) + this.endNumStrings * t;
-		const increment = this.startIncrement * (1 - t) + this.endIncrement * t;
+		let numPoints, pointFraction;
+		if (this.startNumPoints === this.endNumPoints) {
+			numPoints = this.startNumPoints;
+			pointFraction = 0;
+		} else {
+			numPoints = this.startNumPoints * (1 - t) + this.endNumPoints * t;
+			pointFraction = numPoints - Math.trunc(numPoints);
+			numPoints = Math.trunc(numPoints);
+		}
+
+		let start = this.startOffset * (1 - t) + this.endOffset * t;
+		start += pointFraction / (numPoints + 1) * numPoints;
+
+		let mod = this.startNumPoints % this.startIncrement;
+		if (mod > 0.5 * this.startIncrement) {
+			mod -= this.startIncrement;
+		}
+		let increment = (numPoints + pointFraction) / this.startNumPoints * this.startIncrement;
+		const div = Math.trunc(numPoints / increment);
+		increment += (mod + numPoints % increment) / div;
 
 		const vertexFractions = Geometry.getPerimeterOffsets(
 			morph.pointsX, morph.pointsY, this.closed
 		);
 		this.lines = [];
-		for (let i = numStrings - Math.trunc(numStrings); i < numStrings; i++) {
-			const startFraction = i / numStrings;
-			let endFraction = startFraction + increment;
-			if (endFraction > 1) {
+		for (let i = 0; i < numPoints; i++) {
+			let end = start + increment;
+			if (end > numPoints) {
 				if (this.closed) {
-					endFraction %= 1;
+					end %= numPoints;
 				} else {
 					break;
 				}
 			}
 			const [vertex1, proportion1, x1, y1] = Geometry.getPerimeterOffset(
-				startFraction, morph.pointsX, morph.pointsY, vertexFractions, this.closed
+				start / numPoints, morph.pointsX, morph.pointsY, vertexFractions, this.closed
 			);
 			const [vertex2, proportion2, x2, y2] = Geometry.getPerimeterOffset(
-				endFraction, morph.pointsX, morph.pointsY, vertexFractions, this.closed
+				end / numPoints, morph.pointsX, morph.pointsY, vertexFractions, this.closed
 			);
 			this.lines.push(new Line(x1, y1, x2, y2));
+			start = end;
 		}
 
 		if (this.startWidth !== undefined) {
@@ -928,25 +947,20 @@ const morph = new Canvas2DMorph(
 );
 morph.shadowMorph = shadowMorph;
 
-const startNumStrings = parseInt(parameters.get('strings'));
-if (Number.isFinite(startNumStrings)) {
-	let endNumStrings = parseInt(parameters.get('strings2'));
-	if (!Number.isFinite(endNumStrings)) {
-		endNumStrings = startNumStrings;
+const startNumStringPoints = parseInt(parameters.get('strings'));
+if (Number.isFinite(startNumStringPoints)) {
+	let endNumStringPoints = parseInt(parameters.get('strings2'));
+	if (!Number.isFinite(endNumStringPoints)) {
+		endNumStringPoints = startNumStringPoints;
 	}
 	let startIncrement = parseFloat(parameters.get('string_add'));
-	let endIncrement;
 	if (!Number.isFinite(startIncrement)) {
-		startIncrement = 1 / numVertices;
-		endIncrement = 1 / numVertices2;
-	} else {
-		endIncrement = parseFloat(parameters.get('string_add2'));
-		if (!Number.isFinite(endIncrement)) {
-			endIncrement = startIncrement;
-		}
+		startIncrement = Math.round(startNumStringPoints / numVertices);
+		startIncrement += (1 - startNumStringPoints % startIncrement) /
+			Math.trunc(startNumStringPoints / startIncrement);
 	}
 	morph.customMorph = new StringArtMorph(
-		startNumStrings, startIncrement, true, endNumStrings, endIncrement
+		startNumStringPoints, 0, startIncrement, true, endNumStringPoints
 	);
 }
 
