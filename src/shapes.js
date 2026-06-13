@@ -3,7 +3,6 @@
 import {Geometry, Sort} from './math.js';
 
 class Shape {
-	#perimeter;
 
 	/**Constructs a new shape from two arrays of x and y coordinates and performs the following
 	 * operations.
@@ -29,7 +28,7 @@ class Shape {
 			deltaX[i] = dx;
 			deltaY[i] = dy;
 			radii[i] = Math.hypot(dx, dy);
-			angles[i] = Math.atan2(deltaY[i], deltaX[i]);
+			angles[i] = Math.atan2(dy, dx);
 		}
 
 		let area = 0;
@@ -83,24 +82,11 @@ class Shape {
 		return this.pointsX.length;
 	}
 
-	perimeter(closed) {
-		let length = this.#perimeter;
-		if (closed) {
-			const numPoints = this.numPoints;
-			length += Math.hypot(
-				this.resizedX[0] - this.resizedX[numPoints - 1],
-				this.resizedY[0] - this.resizedY[numPoints - 1]
-			);
-		}
-		return length;
-	}
-
 	resetTransform() {
 		const deltaX = this.deltaX;
 		const deltaY = this.deltaY;
 		this.resizedX = deltaX.slice();
 		this.resizedY = deltaY.slice();
-		this.#perimeter = Geometry.perimeter(deltaX, deltaY, false);
 		this.scaleFactor = 1;
 		this.rotatedX = deltaX.slice();
 		this.rotatedY = deltaY.slice();
@@ -115,15 +101,14 @@ class Shape {
 	 * and this.resizedY
 	 */
 	resize(size) {
-		const scale = size / this.size;
+		const scale = this.size / size;
 		const numPoints = this.numPoints;
 		for (let i = 0; i < numPoints; i++) {
-			const radius = this.radii[i] * scale;
+			const radius = this.radii[i] / scale;
 			const angle = this.angles[i];
 			this.resizedX[i] = radius * Math.cos(angle);
 			this.resizedY[i] = radius * Math.sin(angle);
 		}
-		this.#perimeter = Geometry.perimeter(this.resizedX, this.resizedY, false);
 		this.scaleFactor = scale;
 	}
 
@@ -146,10 +131,10 @@ class Shape {
 
 		const angle = Math.atan2(resizedY, resizedX);
 		this.angles.splice(index, 0, angle);
-		const radius = (resizedX / this.scaleFactor) / Math.cos(angle);
+		const radius = (resizedX * this.scaleFactor) / Math.cos(angle);
 		this.radii.splice(index, 0, radius);
-		const deltaX = resizedX / this.scaleFactor;
-		const deltaY = resizedY / this.scaleFactor;
+		const deltaX = resizedX * this.scaleFactor;
+		const deltaY = resizedY * this.scaleFactor;
 		this.deltaX.splice(index, 0, deltaX);
 		this.deltaY.splice(index, 0, deltaY);
 		this.pointsX.splice(index, 0, deltaX + this.centreX);
@@ -600,12 +585,13 @@ class Path {
 }
 
 class Line {
-	constructor(x1, y1, x2, y2, colour) {
+	constructor(x1, y1, x2, y2, colours, offsets) {
 		this.x1 = x1;
 		this.y1 = y1;
 		this.x2 = x2;
 		this.y2 = y2;
-		this.colour = colour;
+		this.colours = colours;
+		this.offsets = offsets;
 	}
 }
 

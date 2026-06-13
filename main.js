@@ -100,7 +100,7 @@ function layoutPolygons(pointsGenerator, numPoints, numPoints2 = numPoints) {
 
 function moveLength(polygon1, polygon2) {
 	const numPoints = polygon2.numPoints;
-	const inverseScale = polygon1.size / polygon2.size;
+	const inverseScale = 1 / polygon2.scaleFactor;
 
 	const translateX = polygon2.centreX - polygon1.centreX;
 	const translateY = polygon2.centreY - polygon1.centreY;
@@ -357,22 +357,21 @@ class ShadowMorph {
 class StringArtMorph {
 
 	constructor(
-		startNumPoints, startOffset, startIncrement, closed,
-		endNumPoints = startNumPoints, endOffset = startOffset
+		numPoints1, offset1, increment, closed, numPoints2 = numPoints1, offset2 = offset1
 	) {
-		this.startNumPoints = startNumPoints;
-		this.startOffset = startOffset;
-		this.startIncrement = startIncrement;
+		this.numPoints1 = numPoints1;
+		this.offset1 = offset1;
+		this.increment = increment;
 		this.closed = closed;
-		this.endNumPoints = endNumPoints;
-		this.endOffset = endOffset;
+		this.numPoints2 = numPoints2;
+		this.offset2 = offset2;
 
 		this.startWidth = undefined;
 		this.endWidth = undefined;
 		this.widthEase = Ease.linear;
 
-		this.colourMorph = undefined;
-		this.colourRepeat = undefined;
+		this.colourMorphs = undefined;
+		this.colourLengths = undefined;
 
 		this.lines = [];
 		this.width = undefined;
@@ -383,47 +382,72 @@ class StringArtMorph {
 		this.endWidth = end;
 	}
 
-	setColour(colourMorph, repeatLength) {
-		this.colourMorph = colourMorph;
-		this.colourRepeat = repeatLength;
+	setColours(colourMorphs, lengths) {
+		this.colourMorphs = colourMorphs;
+		this.colourLengths = length;
 	}
 
 	interpolate(morph, interpolation, context) {
-		const perimeter1 = morph.polygon1.perimeter(this.closed);
-		const perimeter2 = morph.polygon2.perimeter(this.closed);
-		const perimeter = Geometry.perimeter(morph.pointsX, morph.pointsY, this.closed);
-		let t = Math.min(Math.max((perimeter - perimeter1) / (perimeter2 - perimeter1), 0), 1);
+		const polygon1 = morph.polygon1;
+		const polygon2 = morph.polygon2;
+		const perimeter1 = Geometry.perimeter(polygon1.deltaX, polygon1.deltaY, this.closed);
+		const perimeter2 = Geometry.perimeter(polygon2.deltaX, polygon2.deltaY, this.closed);
+		const perimeter = Geometry.perimeter(
+			morph.pointsX.map(x => x * morph.scaleX),
+			morph.pointsY.map(y => y * morph.scaleY),
+			this.closed
+		);
+		let t = Math.min(Math.max(
+			(perimeter - Math.min(perimeter1, perimeter2)) / Math.abs(perimeter2 - perimeter1),
+		0), 1);
+
 		let numPoints, pointFraction;
-		if (this.startNumPoints === this.endNumPoints) {
-			numPoints = this.startNumPoints;
+		if (this.numPoints1 === this.numPoints2) {
+			numPoints = this.numPoints1;
 			pointFraction = 0;
 		} else {
-			numPoints = this.startNumPoints * (1 - t) + this.endNumPoints * t;
+			// Greater perimeter needs to map to a larger number of points.
+			if (this.numPoints2 < this.numPoints1) {
+				t = 1 - t;
+			}
+			numPoints = this.numPoints1 * (1 - t) + this.numPoints2 * t;
 			pointFraction = numPoints - Math.trunc(numPoints);
 			numPoints = Math.trunc(numPoints);
 		}
 
-		let offset = this.startOffset * (1 - t) + this.endOffset * t;
+		let offset = this.offset1 * (1 - t) + this.offset2 * t;
 		offset += pointFraction / (numPoints + 1) * numPoints;
 
-		let mod = this.startNumPoints % this.startIncrement;
-		if (mod > 0.5 * this.startIncrement) {
-			mod -= this.startIncrement;
+		let mod = this.numPoints1 % this.increment;
+		if (mod > 0.5 * this.increment) {
+			mod -= this.increment;
 		}
-		let increment = (numPoints + pointFraction) / this.startNumPoints * this.startIncrement;
+		let increment = (numPoints + pointFraction) / this.numPoints1 * this.increment;
 		const div = Math.trunc(numPoints / increment);
 		increment += (mod + numPoints % increment) / div;
 
 		const vertexFractions = Geometry.getPerimeterOffsets(
 			morph.pointsX, morph.pointsY, this.closed
 		);
-		this.lines = [];
+
+		let colours, colourIndex, colour, prevColour, colourElapsed, colourLength;
+		if (this.colourMorphs) {
+			colours = this.colourMorphs.map(m => m.interpolate(morph, interpolation));
+			colourIndex = 0;
+			colour = colours[0];
+			prevColour = colour;
+			colourElapsed = 0;
+			colourLength = this.colourLengths[0];
+		}
+
 		let start = 0;
+		this.lines = [];
 		for (let i = 0; i < numPoints; i++) {
 			let end = start + increment;
 			if (end + offset > numPoints && !this.closed) {
 				break;
 			}
+
 			const [vertex1, proportion1, x1, y1] = Geometry.getPerimeterOffset(
 				((start + offset) % numPoints) / numPoints,
 				morph.pointsX, morph.pointsY, vertexFractions, this.closed
@@ -432,7 +456,32 @@ class StringArtMorph {
 				((end + offset) % numPoints) / numPoints,
 				morph.pointsX, morph.pointsY, vertexFractions, this.closed
 			);
-			this.lines.push(new Line(x1, y1, x2, y2));
+
+			if (colours) {
+				const lineDistance = Math.hypot(x2 - x1, y2 - y1);
+				const lineColours = [colour];
+				const colourOffsets = [0];
+				let distance = colourLength - colourElapsed;
+				while (distance < lineDistance) {
+					colourIndex = (colourIndex + 1) % colours.length;
+					prevColour = colour;
+					colour = colours[colourIndex];
+					lineColours.push(colour);
+					colourOffsets.push(distance / lineDistance);
+					colourLength = this.colourLengths[colourIndex];
+					distance += colourLength;
+				}
+				const prevDistance = distance - colourLength;
+				const percentage = (lineLength - prevDistance) / colourLength * 100;
+				colour = 'color-mix(in srgb-linear, ' + prevColour + ', ' + colour + ' ' + percentage + '%)';
+				lineColours.push(colour);
+				colourOffsets.push(1);
+				this.lines.push(new Line(x1, y1, x2, y2, lineColours, colourOffsets));
+				colourElapsed = colourLength - (distance - lineDistance);
+			} else {
+				this.lines.push(new Line(x1, y1, x2, y2));
+			}
+
 			start = end;
 		}
 
@@ -555,9 +604,9 @@ class Morph {
 		t = this.rotationEase(interpolation);
 		this.rotation = -polygon2.rotation * t;
 		t = this.scaleXEase(interpolation);
-		this.scaleX = polygon2.size / polygon1.size * t + 1 - t;
+		this.scaleX = polygon2.scaleFactor * t + 1 - t;
 		t = this.scaleYEase(interpolation);
-		this.scaleY = polygon2.size / polygon1.size * t + 1 - t;
+		this.scaleY = polygon2.scaleFactor * t + 1 - t;
 
 		const numPoints = polygon2.numPoints;
 		const pointsX = new Array(numPoints);
@@ -769,7 +818,7 @@ const numVertices = parseInt(parameters.get('vertices')) || 3 + Math.trunc(Math.
 const numVertices2 = parseInt(parameters.get('vertices2')) || 3 + Math.trunc(Math.random() * 6);
 
 let [polygon1, polygon2] = layoutPolygons(RandomShape.cyclicPolygonPoints, numVertices, numVertices2);
-if (mode === Mode.OVERLAY && polygon2.size > polygon1.size) {
+if (mode === Mode.OVERLAY && polygon2.scaleFactor > 1) {
 	[polygon1, polygon2] = [polygon2, polygon1];
 }
 
@@ -952,14 +1001,14 @@ if (Number.isFinite(startNumStringPoints)) {
 	if (!Number.isFinite(endNumStringPoints)) {
 		endNumStringPoints = startNumStringPoints;
 	}
-	let startIncrement = parseFloat(parameters.get('string_add'));
-	if (!Number.isFinite(startIncrement)) {
-		startIncrement = Math.round(startNumStringPoints / numVertices);
-		startIncrement += (1 - startNumStringPoints % startIncrement) /
-			Math.trunc(startNumStringPoints / startIncrement);
+	let increment = parseFloat(parameters.get('string_add'));
+	if (!Number.isFinite(increment)) {
+		increment = Math.round(startNumStringPoints / numVertices);
+		increment += (1 - startNumStringPoints % increment) /
+			Math.trunc(startNumStringPoints / increment);
 	}
 	morph.customMorph = new StringArtMorph(
-		startNumStringPoints, 0, startIncrement, true, endNumStringPoints
+		startNumStringPoints, 0, increment, true, endNumStringPoints
 	);
 }
 
