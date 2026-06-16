@@ -384,7 +384,7 @@ class StringArtMorph {
 
 	setColours(colourMorphs, lengths) {
 		this.colourMorphs = colourMorphs;
-		this.colourLengths = length;
+		this.colourLengths = lengths;
 	}
 
 	interpolate(morph, interpolation, context) {
@@ -418,13 +418,16 @@ class StringArtMorph {
 		let offset = this.offset1 * (1 - t) + this.offset2 * t;
 		offset += pointFraction / (numPoints + 1) * numPoints;
 
-		let mod = this.numPoints1 % this.increment;
-		if (mod > 0.5 * this.increment) {
-			mod -= this.increment;
-		}
+		const mod1 = this.numPoints1 % this.increment;
 		let increment = (numPoints + pointFraction) / this.numPoints1 * this.increment;
-		const div = Math.trunc(numPoints / increment);
-		increment += (mod + numPoints % increment) / div;
+		let div = Math.trunc(numPoints / increment);
+		const mod = numPoints % increment;
+		if (mod === 0) {
+			increment += mod1 / div;
+		} else {
+			div++;
+			increment += (mod1 - mod) / div;
+		}
 
 		const vertexFractions = Geometry.getPerimeterOffsets(
 			morph.pointsX, morph.pointsY, this.closed
@@ -458,26 +461,27 @@ class StringArtMorph {
 			);
 
 			if (colours) {
-				const lineDistance = Math.hypot(x2 - x1, y2 - y1);
+				const lineLength = Math.hypot(x2 - x1, y2 - y1);
 				const lineColours = [colour];
 				const colourOffsets = [0];
 				let distance = colourLength - colourElapsed;
-				while (distance < lineDistance) {
+				let prevDistance = 0;
+				while (distance < lineLength) {
 					colourIndex = (colourIndex + 1) % colours.length;
 					prevColour = colour;
 					colour = colours[colourIndex];
 					lineColours.push(colour);
-					colourOffsets.push(distance / lineDistance);
+					colourOffsets.push(distance / lineLength);
 					colourLength = this.colourLengths[colourIndex];
+					prevDistance = distance;
 					distance += colourLength;
 				}
-				const prevDistance = distance - colourLength;
 				const percentage = (lineLength - prevDistance) / colourLength * 100;
 				colour = 'color-mix(in srgb-linear, ' + prevColour + ', ' + colour + ' ' + percentage + '%)';
 				lineColours.push(colour);
 				colourOffsets.push(1);
 				this.lines.push(new Line(x1, y1, x2, y2, lineColours, colourOffsets));
-				colourElapsed = colourLength - (distance - lineDistance);
+				colourElapsed = colourLength - (distance - lineLength);
 			} else {
 				this.lines.push(new Line(x1, y1, x2, y2));
 			}
@@ -900,7 +904,7 @@ if (!Number.isFinite(endEndStroke)) {
 	endEndStroke = startEndStroke === 0 ? 1 : startEndStroke;
 }
 
-let strokeColourMorph;
+let strokeColourMorph, strokeColourMorph2, strokePaint;
 let strokeMorph;
 
 if (hasEndLineWidth && !hasStartLineWidth) {
@@ -908,23 +912,26 @@ if (hasEndLineWidth && !hasStartLineWidth) {
 }
 if (hasStrokeColour) {
 	strokeColourMorph = new ColourMorph.Colour(parameters.get('stroke'));
+	strokeColourMorph2 = strokeColourMorph;
+	strokePaint = strokeColourMorph;
+
 	if (parameters.has('stroke2')) {
-		const toColour = new ColourMorph.Colour(parameters.get('stroke2'));
+		strokeColourMorph2 = new ColourMorph.Colour(parameters.get('stroke2'));
 		const gradientType = parseInt(parameters.get('stroke_gradient'));
 		switch (gradientType) {
 		case 1:
-			strokeColourMorph = new ColourMorph.EdgePerpendicularGradient(
-				0, [strokeColourMorph, toColour]
+			strokePaint = new ColourMorph.EdgePerpendicularGradient(
+				0, [strokeColourMorph, strokeColourMorph2]
 			);
 			break;
 		case 2:
-			strokeColourMorph = new ColourMorph.EdgeParallelGradient(
-				0, [strokeColourMorph, toColour]
+			strokePaint = new ColourMorph.EdgeParallelGradient(
+				0, [strokeColourMorph, strokeColourMorph2]
 			);
 			break;
 		default: // aka Case 5
-			strokeColourMorph = new ColourMorph.CentreConicGradient(
-				[strokeColourMorph, toColour, strokeColourMorph],
+			strokePaint = new ColourMorph.CentreConicGradient(
+				[strokeColourMorph, strokeColourMorph2, strokeColourMorph],
 				[0, 0.5, 1]
 			);
 		}
@@ -941,7 +948,7 @@ if (
 }
 
 if (startLineWidth > 0 || endLineWidth > 0) {
-	strokeMorph = new StrokeMorph(true, strokeColourMorph);
+	strokeMorph = new StrokeMorph(true, strokePaint);
 	strokeMorph.setWidth(startLineWidth, endLineWidth);
 	strokeMorph.setDash(startDashPattern, endDashPattern);
 	strokeMorph.setDashOffset(startDashOffset, endDashOffset);
@@ -1007,9 +1014,14 @@ if (Number.isFinite(startNumStringPoints)) {
 		increment += (1 - startNumStringPoints % increment) /
 			Math.trunc(startNumStringPoints / increment);
 	}
-	morph.customMorph = new StringArtMorph(
+	const stringArt = new StringArtMorph(
 		startNumStringPoints, 0, increment, true, endNumStringPoints
 	);
+	stringArt.setColours(
+		[strokeColourMorph, strokeColourMorph2],
+		[200, 200]
+	);
+	morph.customMorph = stringArt;
 }
 
 morph.setSpeed(speed);

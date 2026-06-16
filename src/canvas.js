@@ -50,10 +50,28 @@ function drawStrings(context, morph) {
 	if (morph.customMorph.width !== undefined) {
 		context.lineWidth = morph.customMorph.width;
 	}
-	for (let line of morph.customMorph.lines) {
+	if (morph.customMorph.lines[0]?.colours !== undefined) {
+		const oldStroke = context.strokeStyle;
+		for (let line of morph.customMorph.lines) {
+			context.beginPath();
+			context.moveTo(line.x1, line.y1);
+			context.lineTo(line.x2, line.y2);
+			const gradient = context.createLinearGradient(line.x1, line.y1, line.x2, line.y2);
+			for (let i = 0; i < line.colours.length; i++) {
+				const colour = line.colours[i];
+				const offset = line.offsets[i];
+				gradient.addColorStop(offset, colour);
+			}
+			context.strokeStyle = gradient;
+			context.stroke();
+		}
+		context.strokeStyle = oldStroke;
+	} else {
 		context.beginPath();
-		context.moveTo(line.x1, line.y1);
-		context.lineTo(line.x2, line.y2);
+		for (let line of morph.customMorph.lines) {
+			context.moveTo(line.x1, line.y1);
+			context.lineTo(line.x2, line.y2);
+		}
 		context.stroke();
 	}
 }
