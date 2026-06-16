@@ -766,6 +766,9 @@ function drawFaded(context, morph, interpolation) {
 	const alpha = Math.max(Math.round(255 / morph.numFrames), 1) / 255;
 	context.globalAlpha = alpha;
 	Canvas.drawInterpolatedShape(context, morph, interpolation);
+	if (morph.customMorph) {
+		Canvas.drawStrings(context, morph);
+	}
 }
 
 const canvas = document.getElementById('canvas');
@@ -938,7 +941,7 @@ if (hasStrokeColour) {
 	}
 }
 if (
-	(!hasStartLineWidth && !hasEndLineWidth) &&
+	!hasStartLineWidth && !hasEndLineWidth && !parameters.has('strings') &&
 	(
 		hasStrokeColour || startDashPattern.length > 0 ||
 		startStartStroke > 0 || endStartStroke > 0 || startEndStroke < 1 || endEndStroke < 1
@@ -1018,7 +1021,10 @@ if (Number.isFinite(startNumStringPoints)) {
 		startNumStringPoints, 0, increment, true, endNumStringPoints
 	);
 	stringArt.setColours(
-		[strokeColourMorph, strokeColourMorph2],
+		[
+			strokeColourMorph || ColourMorph.Constant.BLACK,
+			strokeColourMorph2 || ColourMorph.Constant.BLACK
+		],
 		[200, 200]
 	);
 	morph.customMorph = stringArt;

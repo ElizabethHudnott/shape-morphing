@@ -47,6 +47,8 @@ function drawInterpolatedShape(context, morph) {
 }
 
 function drawStrings(context, morph) {
+	context.globalAlpha = 1;
+	context.shadowColor = 'transparent';
 	if (morph.customMorph.width !== undefined) {
 		context.lineWidth = morph.customMorph.width;
 	}

@@ -32,6 +32,9 @@ shadow_colour | The colour the shadow is drawn in. This is usually black but oth
 sun_x, sun_y | The positioning of the light source used to generate the shadow, as proportions of the width and height of the window.
 blur | The amount of blur effect to apply to the whole shape, in pixels.
 blur2 | The amount of blur to apply in the last frame of the animation (if different from the start of the animation).
+strings | The number of anchor points evenly distributed around the shape's perimeter to use to create string art.
+strings2 | The number of anchor points for strings can vary during the course of an animation.
+string_add | The number of anchor points to skip when connecting a string.
 
 Each feature which can animated has its own easing function associated with it which determines if change happens linearly or if it happens with some acceleration at the beginning of the motion and/or deceleration toward the end. A selection of different easing functions have been constructed but the choice of which easing function gets applied to each one of the various visual characteristics cannot be altered from the URL.
 
