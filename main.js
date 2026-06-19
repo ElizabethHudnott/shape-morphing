@@ -416,20 +416,16 @@ class StringArtMorph {
 		}
 
 		this.lines = [];
-		let increment = ((numPoints + pointFraction) / this.numPoints1 * this.increment)
-			% numPoints;
+		let increment = ((numPoints + pointFraction) / this.numPoints1 * this.increment) % numPoints;
 		if (increment === 0) {
 			return;
 		}
 		const mod1 = this.numPoints1 % this.increment;
-		const div = Math.trunc(numPoints / increment);
+		const div = Math.round(numPoints / increment);
 		increment += (mod1 - (div * increment - numPoints)) / div;
 
 		let offset = this.offset1 * (1 - t) + this.offset2 * t;
-		const a = (numPoints - 1) / numPoints;
-		const b = numPoints / (numPoints + 1);
-		const c = (this.numPoints1 - 1) / this.numPoints1;
-		offset += a - c + pointFraction * (b - a);
+		offset += 1 / (numPoints + pointFraction);
 
 		const vertexFractions = Geometry.getPerimeterOffsets(
 			morph.pointsX, morph.pointsY, this.closed
