@@ -361,7 +361,7 @@ class StringArtMorph {
 	) {
 		this.numPoints1 = numPoints1;
 		this.offset1 = offset1;
-		this.increment = increment;
+		this.increment = increment % numPoints1;
 		this.closed = closed;
 		this.numPoints2 = numPoints2;
 		this.offset2 = offset2;
@@ -415,19 +415,21 @@ class StringArtMorph {
 			numPoints = Math.trunc(numPoints);
 		}
 
-		let offset = this.offset1 * (1 - t) + this.offset2 * t;
-		offset += pointFraction / (numPoints + 1) * numPoints;
-
-		const mod1 = this.numPoints1 % this.increment;
-		let increment = (numPoints + pointFraction) / this.numPoints1 * this.increment;
-		let div = Math.trunc(numPoints / increment);
-		const mod = numPoints % increment;
-		if (mod === 0) {
-			increment += mod1 / div;
-		} else {
-			div++;
-			increment += (mod1 - mod) / div;
+		this.lines = [];
+		let increment = ((numPoints + pointFraction) / this.numPoints1 * this.increment)
+			% numPoints;
+		if (increment === 0) {
+			return;
 		}
+		const mod1 = this.numPoints1 % this.increment;
+		const div = Math.trunc(numPoints / increment);
+		increment += (mod1 - (div * increment - numPoints)) / div;
+
+		let offset = this.offset1 * (1 - t) + this.offset2 * t;
+		const a = (numPoints - 1) / numPoints;
+		const b = numPoints / (numPoints + 1);
+		const c = (this.numPoints1 - 1) / this.numPoints1;
+		offset += a - c + pointFraction * (b - a);
 
 		const vertexFractions = Geometry.getPerimeterOffsets(
 			morph.pointsX, morph.pointsY, this.closed
@@ -444,7 +446,6 @@ class StringArtMorph {
 		}
 
 		let start = 0;
-		this.lines = [];
 		for (let i = 0; i < numPoints; i++) {
 			let end = start + increment;
 			if (end + offset > numPoints && !this.closed) {
