@@ -423,17 +423,12 @@ class StringArtMorph {
 		const mod1 = Math.ceil(this.numPoints1 / this.increment) * this.increment - this.numPoints1;
 		const steps = Math.ceil(numPoints / increment);
 		increment += (mod1 - (steps * increment - numPoints)) / steps;
+		increment = Math.round(increment);
 
 		let offset = this.offset1 * (1 - t) + this.offset2 * t;
 		offset += 1 / (numPoints + pointFraction);
 
-		const epilson = 1 / 8192;
-		increment = Math.round(increment / epilson) * epilson;
-		if (increment === Math.trunc(increment)) {
-			const divisor = Geometry.gcd(increment, numPoints);
-			numPoints /= divisor;
-			increment /= divisor;
-		}
+		const numPieces = Geometry.gcd(increment, numPoints);
 
 		const vertexFractions = Geometry.getPerimeterOffsets(
 			morph.pointsX, morph.pointsY, this.closed
@@ -447,11 +442,6 @@ class StringArtMorph {
 			prevColour = colour;
 			colourElapsed = 0;
 			colourLength = this.colourLengths[0];
-		}
-
-		let numPieces = 1;
-		if (numPoints % increment === 0) {
-			numPieces = increment > 0.5 * numPoints ? numPoints - increment : increment;
 		}
 
 		for (let j = 0; j < numPieces; j++) {
