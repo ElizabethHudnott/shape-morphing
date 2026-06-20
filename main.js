@@ -420,12 +420,20 @@ class StringArtMorph {
 		if (increment === 0) {
 			return;
 		}
-		const mod1 = this.numPoints1 % this.increment;
-		const div = Math.round(numPoints / increment);
-		increment += (mod1 - (div * increment - numPoints)) / div;
+		const mod1 = Math.ceil(this.numPoints1 / this.increment) * this.increment - this.numPoints1;
+		const steps = Math.ceil(numPoints / increment);
+		increment += (mod1 - (steps * increment - numPoints)) / steps;
 
 		let offset = this.offset1 * (1 - t) + this.offset2 * t;
 		offset += 1 / (numPoints + pointFraction);
+
+		const epilson = 1 / 8192;
+		increment = Math.round(increment / epilson) * epilson;
+		if (increment === Math.trunc(increment)) {
+			const divisor = Geometry.gcd(increment, numPoints);
+			numPoints /= divisor;
+			increment /= divisor;
+		}
 
 		const vertexFractions = Geometry.getPerimeterOffsets(
 			morph.pointsX, morph.pointsY, this.closed
@@ -441,50 +449,58 @@ class StringArtMorph {
 			colourLength = this.colourLengths[0];
 		}
 
-		let start = 0;
-		for (let i = 0; i < numPoints; i++) {
-			let end = start + increment;
-			if (end + offset > numPoints && !this.closed) {
-				break;
-			}
-
-			const [vertex1, proportion1, x1, y1] = Geometry.getPerimeterOffset(
-				((start + offset) % numPoints) / numPoints,
-				morph.pointsX, morph.pointsY, vertexFractions, this.closed
-			);
-			const [vertex2, proportion2, x2, y2] = Geometry.getPerimeterOffset(
-				((end + offset) % numPoints) / numPoints,
-				morph.pointsX, morph.pointsY, vertexFractions, this.closed
-			);
-
-			if (colours) {
-				const lineLength = Math.hypot(x2 - x1, y2 - y1);
-				const lineColours = [colour];
-				const colourOffsets = [0];
-				let distance = colourLength - colourElapsed;
-				let prevDistance = 0;
-				while (distance < lineLength) {
-					colourIndex = (colourIndex + 1) % colours.length;
-					prevColour = colour;
-					colour = colours[colourIndex];
-					lineColours.push(colour);
-					colourOffsets.push(distance / lineLength);
-					colourLength = this.colourLengths[colourIndex];
-					prevDistance = distance;
-					distance += colourLength;
-				}
-				const percentage = (lineLength - prevDistance) / colourLength * 100;
-				colour = 'color-mix(in srgb-linear, ' + prevColour + ', ' + colour + ' ' + percentage + '%)';
-				lineColours.push(colour);
-				colourOffsets.push(1);
-				this.lines.push(new Line(x1, y1, x2, y2, lineColours, colourOffsets));
-				colourElapsed = colourLength - (distance - lineLength);
-			} else {
-				this.lines.push(new Line(x1, y1, x2, y2));
-			}
-
-			start = end;
+		let numPieces = 1;
+		if (numPoints % increment === 0) {
+			numPieces = increment > 0.5 * numPoints ? numPoints - increment : increment;
 		}
+
+		for (let j = 0; j < numPieces; j++) {
+			let start = j;
+			const begin = start;
+			for (let i = 0; i < numPoints / numPieces; i++) {
+				const end = start + increment;
+				if (end + offset > numPoints && !this.closed) {
+					break;
+				}
+
+				const [vertex1, proportion1, x1, y1] = Geometry.getPerimeterOffset(
+					((start + offset) % numPoints) / numPoints,
+					morph.pointsX, morph.pointsY, vertexFractions, this.closed
+				);
+				const [vertex2, proportion2, x2, y2] = Geometry.getPerimeterOffset(
+					((end + offset) % numPoints) / numPoints,
+					morph.pointsX, morph.pointsY, vertexFractions, this.closed
+				);
+
+				if (colours) {
+					const lineLength = Math.hypot(x2 - x1, y2 - y1);
+					const lineColours = [colour];
+					const colourOffsets = [0];
+					let distance = colourLength - colourElapsed;
+					let prevDistance = 0;
+					while (distance < lineLength) {
+						colourIndex = (colourIndex + 1) % colours.length;
+						prevColour = colour;
+						colour = colours[colourIndex];
+						lineColours.push(colour);
+						colourOffsets.push(distance / lineLength);
+						colourLength = this.colourLengths[colourIndex];
+						prevDistance = distance;
+						distance += colourLength;
+					}
+					const percentage = (lineLength - prevDistance) / colourLength * 100;
+					colour = 'color-mix(in srgb-linear, ' + prevColour + ', ' + colour + ' ' + percentage + '%)';
+					lineColours.push(colour);
+					colourOffsets.push(1);
+					this.lines.push(new Line(x1, y1, x2, y2, lineColours, colourOffsets));
+					colourElapsed = colourLength - (distance - lineLength);
+				} else {
+					this.lines.push(new Line(x1, y1, x2, y2));
+				}
+
+				start = end;
+			}	// end for each length of string
+		}	// end for each subshape
 
 		if (this.startWidth !== undefined) {
 			t = this.widthEase(interpolation);
